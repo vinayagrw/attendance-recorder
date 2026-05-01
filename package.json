@@ -1,0 +1,25 @@
+{
+  "name": "attendance-recorder",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --filter @attendance/web dev",
+    "build": "pnpm --filter @attendance/web build",
+    "preview": "pnpm --filter @attendance/web preview",
+    "typecheck": "pnpm --filter @attendance/web typecheck",
+    "supabase:start": "npx -y supabase start",
+    "supabase:stop": "npx -y supabase stop",
+    "supabase:reset": "npx -y supabase db reset",
+    "supabase:functions:serve": "npx -y supabase functions serve --no-verify-jwt"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

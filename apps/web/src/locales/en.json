@@ -1,0 +1,41 @@
+{
+  "app": {
+    "name": "Attendance Recorder",
+    "tagline": "Construction site attendance"
+  },
+  "home": {
+    "iAmA": "I am a…",
+    "worker": "Worker",
+    "supervisor": "Supervisor",
+    "admin": "Admin"
+  },
+  "worker": {
+    "login": {
+      "title": "Welcome back",
+      "selectName": "Select your name",
+      "pin": "Enter your 4-digit PIN",
+      "loginButton": "Log in",
+      "register": "First time? Register here"
+    },
+    "register": {
+      "title": "Register",
+      "instructions": "Pick your name, set a PIN, take a selfie. A supervisor will approve you.",
+      "submit": "Submit registration"
+    },
+    "punch": {
+      "in": "Punch In",
+      "out": "Punch Out",
+      "queued": "Queued — will sync when online"
+    }
+  },
+  "supervisor": {
+    "dashboard": "Dashboard",
+    "approvals": "Pending approvals"
+  },
+  "admin": {
+    "projects": "Projects",
+    "sites": "Sites",
+    "workers": "Workers",
+    "audit": "Audit log"
+  }
+}
