@@ -14,6 +14,8 @@ interface PickListWorker {
 export default function WorkerForgotPin() {
   const [workerId, setWorkerId] = useState('')
   const [phone, setPhone] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
   const [note, setNote] = useState('')
   const [info, setInfo] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -29,10 +31,13 @@ export default function WorkerForgotPin() {
   const submit = useMutation({
     mutationFn: async () => {
       if (!workerId) throw new Error('Pick your name')
+      if (!/^\d{4,6}$/.test(newPin)) throw new Error('PIN must be 4-6 digits')
+      if (newPin !== confirmPin) throw new Error("PINs don't match")
       const { error } = await supabase.from('pin_reset_requests').insert({
         worker_id: workerId,
         contact_phone: phone || null,
         note: note || null,
+        requested_pin: newPin,
         status: 'pending',
       })
       if (error) throw error
@@ -40,10 +45,12 @@ export default function WorkerForgotPin() {
     },
     onSuccess: () => {
       setInfo(
-        "Got it. Tell your supervisor — they'll see your request on their dashboard and reset your PIN within a short while.",
+        "Got it. Tell your supervisor — they'll approve your request and you can sign in with your new PIN.",
       )
       setWorkerId('')
       setPhone('')
+      setNewPin('')
+      setConfirmPin('')
       setNote('')
     },
     onError: (e) => {
@@ -55,12 +62,13 @@ export default function WorkerForgotPin() {
   return (
     <RoleScaffold title="Forgot PIN?" backTo="/worker/login">
       <p className="text-sm text-slate-600">
-        Pick your name and submit. Your supervisor will reset your PIN for you in person — they'll
-        give you the new PIN to use the next time you sign in.
+        Pick your name, choose a new 4-6 digit PIN, and submit. Your supervisor approves the
+        request and you can sign in with your new PIN immediately after.
       </p>
 
       <select
         className="input-field"
+        aria-label="Your name"
         value={workerId}
         onChange={(e) => setWorkerId(e.target.value)}
       >
@@ -75,14 +83,36 @@ export default function WorkerForgotPin() {
         type="tel"
         inputMode="tel"
         placeholder="Your phone (so the supervisor can reach you)"
+        aria-label="Phone"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
+      />
+
+      <input
+        type="password"
+        inputMode="numeric"
+        maxLength={6}
+        placeholder="New PIN (4-6 digits)"
+        aria-label="New PIN"
+        className="input-field text-center"
+        value={newPin}
+        onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+      />
+      <input
+        type="password"
+        inputMode="numeric"
+        maxLength={6}
+        placeholder="Confirm new PIN"
+        aria-label="Confirm new PIN"
+        className="input-field text-center"
+        value={confirmPin}
+        onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
       />
 
       <textarea
         className="input-field"
         rows={2}
-        placeholder="Anything else? (optional)"
+        placeholder="Reason or note (optional)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />

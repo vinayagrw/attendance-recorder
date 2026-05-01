@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
@@ -20,8 +21,25 @@ interface Project { id: string; name: string }
 
 export default function AdminSites() {
   const qc = useQueryClient()
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', project_id: '', lat: '', lng: '', radius: '150', timezone: 'Asia/Kolkata' })
+  const [search] = useSearchParams()
+  const projectIdFromUrl = search.get('projectId') ?? ''
+  const [showForm, setShowForm] = useState(!!projectIdFromUrl)
+  const [form, setForm] = useState({
+    name: '',
+    project_id: projectIdFromUrl,
+    lat: '',
+    lng: '',
+    radius: '150',
+    timezone: 'Asia/Kolkata',
+  })
+
+  // Pre-fill the project when the URL says so (deep-link from /admin/projects)
+  useEffect(() => {
+    if (projectIdFromUrl) {
+      setForm((f) => ({ ...f, project_id: projectIdFromUrl }))
+      setShowForm(true)
+    }
+  }, [projectIdFromUrl])
 
   const { data: projects } = useQuery({
     queryKey: ['admin-projects-min'],

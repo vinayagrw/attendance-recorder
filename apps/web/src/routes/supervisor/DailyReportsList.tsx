@@ -169,45 +169,52 @@ export default function SupervisorDailyReportsList() {
             r.headcount_attendance != null &&
             r.headcount_reported !== r.headcount_attendance
           return (
-            <li key={r.id} className="rounded-xl bg-white p-3 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">
-                  {new Date(r.report_date).toLocaleDateString()}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
-                    r.status === 'submitted'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {r.status}
-                </span>
-              </div>
-              <div className="text-xs text-slate-500">
-                {r.sites?.projects?.name ?? '—'} · {r.sites?.name ?? r.site_id.slice(0, 6)}
-              </div>
-              <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
-                <div className="text-slate-500">
-                  Weather: <span className="font-mono text-slate-700">{r.weather_summary ?? '—'}</span>
-                </div>
-                <div className="text-slate-500">
-                  Headcount:{' '}
-                  <span className={`font-mono ${mismatch ? 'text-amber-700' : 'text-slate-700'}`}>
-                    {r.headcount_reported ?? '—'} / {r.headcount_attendance ?? '—'}
+            <li key={r.id}>
+              <Link
+                to={`/supervisor/daily-report?siteId=${r.site_id}&date=${r.report_date}`}
+                className="block rounded-xl bg-white p-3 shadow-sm hover:bg-slate-50"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {new Date(r.report_date).toLocaleDateString()}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      r.status === 'submitted'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {r.status}
                   </span>
                 </div>
-              </div>
-              {r.work_completed && (
-                <div className="mt-1 text-xs text-slate-700">
-                  <strong>Work:</strong> {r.work_completed}
+                <div className="text-xs text-slate-500">
+                  {r.sites?.projects?.name ?? '—'} · {r.sites?.name ?? r.site_id.slice(0, 6)}
                 </div>
-              )}
-              {r.blockers && (
-                <div className="mt-1 text-xs text-red-700">
-                  <strong>Blockers:</strong> {r.blockers}
+                <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-slate-500">
+                    Weather:{' '}
+                    <span className="font-mono text-slate-700">{r.weather_summary ?? '—'}</span>
+                  </div>
+                  <div className="text-slate-500">
+                    Headcount:{' '}
+                    <span className={`font-mono ${mismatch ? 'text-amber-700' : 'text-slate-700'}`}>
+                      {r.headcount_reported ?? '—'} / {r.headcount_attendance ?? '—'}
+                    </span>
+                  </div>
                 </div>
-              )}
+                {r.work_completed && (
+                  <div className="mt-1 text-xs text-slate-700">
+                    <strong>Work:</strong> {r.work_completed}
+                  </div>
+                )}
+                {r.blockers && (
+                  <div className="mt-1 text-xs text-red-700">
+                    <strong>Blockers:</strong> {r.blockers}
+                  </div>
+                )}
+                <div className="mt-1 text-right text-xs text-brand-600">Edit →</div>
+              </Link>
             </li>
           )
         })}

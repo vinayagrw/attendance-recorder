@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
+import { useSupervisor } from '@/hooks/useSupervisor'
 import { logger } from '@/lib/logger'
 
 interface SiteWithBriefing {
@@ -14,6 +15,7 @@ interface SiteWithBriefing {
 
 export default function SupervisorBriefings() {
   const qc = useQueryClient()
+  const { supervisor } = useSupervisor()
 
   const { data: sites, isPending } = useQuery({
     queryKey: ['briefing-sites'],
@@ -35,6 +37,7 @@ export default function SupervisorBriefings() {
         .update({
           daily_note: note || null,
           daily_note_updated_at: new Date().toISOString(),
+          daily_note_updated_by: supervisor?.id ?? null,
         })
         .eq('id', id)
       if (error) throw error

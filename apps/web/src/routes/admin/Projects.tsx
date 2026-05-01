@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
@@ -32,6 +33,21 @@ export default function AdminProjects() {
     },
   })
 
+  const { data: siteCounts } = useQuery({
+    queryKey: ['admin-projects-site-counts'],
+    queryFn: async () => {
+      const { data } = await supabase.from('sites').select('project_id, status')
+      const counts: Record<string, { active: number; total: number }> = {}
+      ;(data ?? []).forEach((s) => {
+        const id = s.project_id as string
+        counts[id] ??= { active: 0, total: 0 }
+        counts[id].total += 1
+        if (s.status === 'active') counts[id].active += 1
+      })
+      return counts
+    },
+  })
+
   const create = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error('Name required')
@@ -55,7 +71,10 @@ export default function AdminProjects() {
       const { error } = await supabase.from('projects').update(update).eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-projects'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-projects'] })
+      qc.invalidateQueries({ queryKey: ['admin-projects-site-counts'] })
+    },
   })
 
   return (
@@ -80,24 +99,43 @@ export default function AdminProjects() {
 
       {isPending && <p className="text-slate-500">Loading…</p>}
       <ul className="flex flex-col gap-2">
-        {(data ?? []).map((p) => (
-          <li key={p.id} className="rounded-xl bg-white p-3 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">{p.name}</span>
-              <select
-                className="rounded-md border border-slate-200 px-2 py-1 text-xs"
-                value={p.status}
-                onChange={(e) => updateStatus.mutate({ id: p.id, status: e.target.value })}
-              >
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            {p.client_name && <div className="text-sm text-slate-500">{p.client_name}</div>}
-            <div className="mt-1 text-xs text-slate-400">
-              Created {new Date(p.created_at).toLocaleDateString()}
-            </div>
-          </li>
-        ))}
+        {(data ?? []).map((p) => {
+          const counts = siteCounts?.[p.id] ?? { active: 0, total: 0 }
+          const noSites = counts.total === 0
+          return (
+            <li key={p.id} className="rounded-xl bg-white p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">{p.name}</span>
+                <select
+                  className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                  value={p.status}
+                  onChange={(e) => updateStatus.mutate({ id: p.id, status: e.target.value })}
+                >
+                  {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              {p.client_name && <div className="text-sm text-slate-500">{p.client_name}</div>}
+              <div className="mt-1 text-xs text-slate-400">
+                Created {new Date(p.created_at).toLocaleDateString()}
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span
+                  className={`text-xs ${noSites ? 'text-amber-700' : 'text-slate-600'}`}
+                >
+                  {noSites
+                    ? '⚠ 0 sites — workers can\'t punch here yet'
+                    : `${counts.active} active site(s)${counts.total !== counts.active ? ` (${counts.total} total)` : ''}`}
+                </span>
+                <Link
+                  to={`/admin/sites?projectId=${p.id}`}
+                  className="rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-100"
+                >
+                  + Add site
+                </Link>
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </RoleScaffold>
   )

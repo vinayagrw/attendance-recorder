@@ -1,12 +1,9 @@
 // Edge Function: worker-pin-reset
-// Admin/supervisor-only. Sets a new PIN for a worker by updating their
-// auth.users password (since the worker password is `<pin>-<workerId.slice(0,8)>`).
-//
-// POST /functions/v1/worker-pin-reset
-//   Authorization: Bearer <supervisor JWT>
-//   { workerId, newPin, requestId? }
-//
-// Returns { ok: true } on success.
+// Two modes:
+//   A) Supervisor-set PIN  →  POST { workerId, newPin }   (legacy / admin path)
+//   B) Approve worker request → POST { requestId }        (M14, primary flow:
+//       worker chose the PIN, supervisor only approves)
+// Both paths gated by the caller's supervisor JWT.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 
@@ -16,8 +13,8 @@ const SERVICE_KEY =
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SB_ANON_KEY') ?? ''
 
 interface ResetBody {
-  workerId: string
-  newPin: string
+  workerId?: string
+  newPin?: string
   requestId?: string
 }
 
@@ -50,45 +47,64 @@ Deno.serve(async (req) => {
   } catch {
     return cors(jsonError('Invalid JSON', 400))
   }
-  if (!body.workerId || !body.newPin) return cors(jsonError('Missing fields', 400))
-  if (!/^\d{4,6}$/.test(body.newPin)) return cors(jsonError('PIN must be 4-6 digits', 400))
+
+  let workerId = body.workerId
+  let newPin = body.newPin
+  const requestId = body.requestId
+
+  // Mode B: Approve worker's request — load workerId + requested_pin from DB
+  if (requestId && (!workerId || !newPin)) {
+    const { data: reqRow, error: reqErr } = await sb
+      .from('pin_reset_requests')
+      .select('id, worker_id, requested_pin, status')
+      .eq('id', requestId)
+      .maybeSingle()
+    if (reqErr || !reqRow) return cors(jsonError('Reset request not found', 404))
+    if (reqRow.status !== 'pending')
+      return cors(jsonError(`Request is ${reqRow.status}`, 409))
+    if (!reqRow.requested_pin)
+      return cors(jsonError('Request has no requested_pin — worker must resubmit', 400))
+    workerId = reqRow.worker_id as string
+    newPin = reqRow.requested_pin as string
+  }
+
+  if (!workerId || !newPin) return cors(jsonError('Missing workerId or newPin', 400))
+  if (!/^\d{4,6}$/.test(newPin)) return cors(jsonError('PIN must be 4-6 digits', 400))
 
   const { data: worker } = await sb
     .from('workers')
     .select('id, auth_user_id')
-    .eq('id', body.workerId)
+    .eq('id', workerId)
     .maybeSingle()
   if (!worker?.auth_user_id) return cors(jsonError('Worker has no auth user', 404))
 
-  const newPassword = `${body.newPin}-${body.workerId.slice(0, 8)}`
+  const newPassword = `${newPin}-${workerId.slice(0, 8)}`
   const { error: updateErr } = await sb.auth.admin.updateUserById(worker.auth_user_id, {
     password: newPassword,
   })
   if (updateErr) return cors(jsonError(`Auth update failed: ${updateErr.message}`, 500))
 
-  // Clear any failed-login lockout
   await sb
     .from('workers')
     .update({ failed_login_count: 0, locked_until: null })
-    .eq('id', body.workerId)
+    .eq('id', workerId)
 
-  // Log the action
   await sb.from('device_logs').insert({
-    worker_id: body.workerId,
+    worker_id: workerId,
     event: 'pin_reset',
-    metadata: { reset_by: sup.id, request_id: body.requestId ?? null },
+    metadata: { reset_by: sup.id, request_id: requestId ?? null },
   })
 
-  // Mark the reset request fulfilled, if one was passed
-  if (body.requestId) {
+  if (requestId) {
     await sb
       .from('pin_reset_requests')
       .update({
         status: 'approved',
         reviewed_by: sup.id,
         reviewed_at: new Date().toISOString(),
+        requested_pin: null,
       })
-      .eq('id', body.requestId)
+      .eq('id', requestId)
   }
 
   return cors(
