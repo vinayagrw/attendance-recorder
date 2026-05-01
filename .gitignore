@@ -36,8 +36,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# coverage
+# coverage + test runner outputs
 coverage/
+test-results/
+playwright-report/
+.playwright/
+blob-report/
 
 # claude / IDE / MCP / skills artefacts (kept out of source repo)
 .claude/
