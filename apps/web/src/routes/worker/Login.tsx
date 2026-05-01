@@ -1,17 +1,107 @@
-import { Link } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
+import { supabase } from '@/lib/supabase'
+import { workerEmail, workerPassword } from '@/hooks/useWorker'
+import { useSession } from '@/hooks/useSession'
+
+interface PickListWorker {
+  id: string
+  full_name: string
+  status: string
+}
 
 export default function WorkerLogin() {
-  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { session, loading } = useSession()
+  const [workerId, setWorkerId] = useState('')
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!loading && session) {
+      // route based on worker.status — handled by /worker/punch's effect
+      navigate('/worker/punch', { replace: true })
+    }
+  }, [loading, session, navigate])
+
+  const { data: workers, isPending } = useQuery({
+    queryKey: ['worker-pick-list'],
+    queryFn: async (): Promise<PickListWorker[]> => {
+      const { data, error } = await supabase
+        .from('workers')
+        .select('id, full_name, status')
+        .in('status', ['invited', 'pending_approval', 'active'])
+        .order('full_name')
+      if (error) throw error
+      return (data as PickListWorker[]) ?? []
+    },
+  })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!workerId) return setError('Pick your name')
+    if (!/^\d{4,6}$/.test(pin)) return setError('PIN is 4-6 digits')
+
+    setSubmitting(true)
+    const { error } = await supabase.auth.signInWithPassword({
+      email: workerEmail(workerId),
+      password: workerPassword(pin, workerId),
+    })
+    setSubmitting(false)
+    if (error) {
+      setError(error.message.includes('Invalid login') ? 'Wrong PIN' : error.message)
+      return
+    }
+  }
+
   return (
-    <RoleScaffold title={t('worker.login.title')} backTo="/">
-      <p className="text-slate-600">
-        Pick your name from the list, then enter your PIN. (Wired up in M2.)
-      </p>
-      <Link to="/worker/register" className="btn-secondary text-center">
-        {t('worker.login.register')}
-      </Link>
+    <RoleScaffold title="Worker login" backTo="/">
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-slate-700">Your name</span>
+          <select
+            className="input-field"
+            value={workerId}
+            onChange={(e) => setWorkerId(e.target.value)}
+            disabled={isPending}
+          >
+            <option value="">— pick your name —</option>
+            {(workers ?? []).map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.full_name}
+                {w.status !== 'active' ? ` · ${w.status}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-slate-700">PIN (4-6 digits)</span>
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            className="input-field text-center text-2xl tracking-widest"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+          />
+        </label>
+
+        {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
+        <button type="submit" className="btn-primary" disabled={submitting}>
+          {submitting ? 'Signing in…' : 'Log in'}
+        </button>
+
+        <Link to="/worker/register" className="btn-secondary text-center">
+          First time? Register
+        </Link>
+      </form>
     </RoleScaffold>
   )
 }

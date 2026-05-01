@@ -8,6 +8,8 @@ import WorkerPending from './routes/worker/Pending'
 import SupervisorLogin from './routes/supervisor/Login'
 import SupervisorDashboard from './routes/supervisor/Dashboard'
 import SupervisorApprovals from './routes/supervisor/Approvals'
+import SupervisorReports from './routes/supervisor/Reports'
+import InstallPrompt from './components/InstallPrompt'
 import AdminProjects from './routes/admin/Projects'
 import AdminSites from './routes/admin/Sites'
 import AdminWorkers from './routes/admin/Workers'
@@ -37,6 +39,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="dashboard" element={<SupervisorDashboard />} />
           <Route path="approvals" element={<SupervisorApprovals />} />
+          <Route path="reports" element={<SupervisorReports />} />
         </Route>
       </Route>
 
@@ -51,5 +54,14 @@ export default function App() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+  )
+}
+
+export function AppWithChrome() {
+  return (
+    <>
+      <App />
+      <InstallPrompt />
+    </>
   )
 }
