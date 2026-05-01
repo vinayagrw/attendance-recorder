@@ -119,21 +119,14 @@ export default function WorkerPunch() {
 
   const site = useMemo(() => sites.find((s) => s.site_id === siteId) ?? null, [sites, siteId])
 
-  // Today's briefing for the selected site
-  const { data: briefing } = useQuery({
-    queryKey: ['site-briefing', siteId],
-    enabled: !!siteId,
-    queryFn: async () => {
-      const today = new Date().toISOString().slice(0, 10)
-      const { data } = await supabase
-        .from('site_briefings')
-        .select('id, note')
-        .eq('site_id', siteId)
-        .eq('valid_for_date', today)
-        .maybeSingle()
-      return data as { id: string; note: string } | null
-    },
-  })
+  // Today's briefing comes from sites.daily_note (already loaded by useWorker
+  // via the worker_my_sites view). The site_briefings history table is a
+  // post-MVP enhancement — see docs/feat-site-of-day-briefing.md.
+  // We use the site_id as a stable "briefing id" so the punch-submit Edge
+  // Function records *which* note was acknowledged.
+  const briefing = site?.daily_note
+    ? { id: `${siteId}:${site.daily_note.length}`, note: site.daily_note }
+    : null
 
   // Reset ack when site or briefing changes
   useEffect(() => setBriefingAck(false), [siteId, briefing?.id])
