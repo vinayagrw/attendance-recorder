@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
+import WorkerAssignments from '@/components/WorkerAssignments'
 
 interface Worker {
   id: string
@@ -115,6 +116,7 @@ export default function AdminWorkers() {
               {w.phone ?? 'no phone'}
               {w.registered_at && ` · registered ${new Date(w.registered_at).toLocaleDateString()}`}
             </div>
+            <WorkerAssignments workerId={w.id} allSites={sites ?? []} />
             <div className="mt-2 flex flex-wrap gap-1 text-xs">
               {w.status === 'pending_approval' && (
                 <button onClick={() => setStatus.mutate({ id: w.id, status: 'active' })}

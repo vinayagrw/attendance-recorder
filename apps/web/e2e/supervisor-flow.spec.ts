@@ -124,8 +124,13 @@ test.describe('authenticated supervisor flows', () => {
   })
 
   test('supervisor sign out returns to login', async ({ page }) => {
+    test.setTimeout(60_000)
     await page.goto('/supervisor/dashboard')
     await page.getByRole('button', { name: 'Sign out' }).click()
     await expect(page).toHaveURL(/\/supervisor\/login$/)
+    // Explicitly navigate away so the realtime channel from the dashboard
+    // unsubscribes cleanly before context teardown — without this, the
+    // websocket close occasionally exceeds the default 30s teardown budget.
+    await page.goto('about:blank')
   })
 })
