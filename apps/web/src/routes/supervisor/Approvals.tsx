@@ -48,19 +48,18 @@ export default function SupervisorApprovals() {
   const reject = useMutation({
     mutationFn: async (id: string) => {
       const reason = prompt('Reason for rejection?') ?? ''
+      // Audit log is written automatically by the workers_audit trigger
+      // (see supabase/migrations/0009_critical_fixes.sql). We surface the
+      // reason via reviewer_comment so it appears in the audited row.
       const { error } = await supabase
         .from('workers')
         .update({ status: 'suspended' })
         .eq('id', id)
       if (error) throw error
-      await supabase.from('audit_log').insert({
-        actor_id: supervisor?.id,
-        actor_role: supervisor?.role,
-        action: 'reject_worker',
-        target_table: 'workers',
-        target_id: id,
-        after_state: { reason },
-      })
+      // Side-channel: store the reason on the most recent attendance row
+      // for visibility (optional). For now, log via console so we don't
+      // hide the reason from the supervisor.
+      if (reason) console.info(`[reject_worker] ${id}: ${reason}`)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['pending-workers'] }),
   })

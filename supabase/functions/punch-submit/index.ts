@@ -125,6 +125,7 @@ Deno.serve(async (req) => {
     ip_address: ip,
     status: flags.length === 0 ? 'pending' : 'flagged',
     flag_reasons: flags,
+    briefing_acknowledged_id: body.acknowledgedBriefingId ?? null,
   }
   if (body.attendanceId) insert.id = body.attendanceId
 

@@ -707,6 +707,90 @@ The full agent research is preserved at `C:\Users\viagr\.claude\plans\i-need-to-
 
 ---
 
+## 21. Code Review Findings & Fixes (M9, 2026-05-01)
+
+After M0–M8 shipped, a structured `/code-review` pass surfaced critical RLS bugs that blocked real usage and several gaps where the code was less complete than the milestones implied. This section documents what was found and what's been fixed; live status is in the table below.
+
+### 21a. Critical bugs found and fixed
+
+| # | Bug | Symptom | Fix | Status |
+|---|---|---|---|---|
+| 1 | RLS infinite recursion on `workers` | Any authenticated SELECT on `workers` returned `54001 stack depth limit exceeded`. Broke supervisor dashboard, approvals, admin workers list, and worker pick-list. | Marked `jwt_worker_id()`, `is_admin()`, `is_supervisor()`, `project_in_scope()` as `SECURITY DEFINER` with `set search_path = public` so they bypass RLS while evaluating their own queries. | ✅ Fixed in [`0009_critical_fixes.sql`](supabase/migrations/0009_critical_fixes.sql) |
+| 2 | Anon worker pick-list blocked by RLS | The login + register dropdowns called `select … from workers` as the anonymous role and got an empty list once recursion was fixed (RLS denied access). | New `list_active_workers()` SECURITY DEFINER RPC granted `EXECUTE` to `anon` + `authenticated`. Frontend updated to call `supabase.rpc('list_active_workers')`. | ✅ Fixed |
+| 3 | Non-admin supervisors couldn't approve workers | `workers_admin_write` policy was admin-only. A `role='supervisor'` user clicking Approve got a 403. Worked in our seed because viagr@ciklum.com is admin. | Added `workers_supervisor_approve` policy that allows UPDATE when the supervisor scopes contain the worker's site's project. | ✅ Fixed |
+| 4 | Audit log INSERT silently denied | `revoke insert on audit_log` from `authenticated` (correctly) prevented client-side INSERTs. The Approvals UI tried to log a reject reason and silently swallowed the 42501 error. | Replaced client-side audit writes with `trg_audit_changes` triggers on `workers`, `attendance`, `sites`, `projects`. Triggers run as SECURITY DEFINER so they write through. Removed the now-unnecessary client INSERT. | ✅ Fixed |
+| 5 | Edge Functions weren't being served | `supabase start` runs the runtime container but doesn't auto-serve `supabase/functions/`. Worker register and punch flows would 404 without running `supabase functions serve` in a separate terminal. | Root `dev` script now uses **concurrently** to spawn both vite and `supabase functions serve` together. `pnpm dev` is now the single command. Standalone `pnpm dev:vite` and `pnpm dev:functions` retained for selective starts. | ✅ Fixed |
+| 6 | Offboarding didn't disable auth user | Setting `workers.status='offboarded'` left the auth.users row active — the worker could still sign in. | New `trg_worker_offboard_ban` trigger sets `auth.users.banned_until = 'infinity'` on offboard, and clears it if the worker is reactivated. | ✅ Fixed |
+
+### 21b. Promised-but-not-built items, now built
+
+| # | Feature | Was | Now | Notes |
+|---|---|---|---|---|
+| 7 | IndexedDB offline queue + connectivity indicator | Punch flow required online | [`apps/web/src/lib/offlineQueue.ts`](apps/web/src/lib/offlineQueue.ts) — enqueue/list/drain. [`Punch.tsx`](apps/web/src/routes/worker/Punch.tsx) shows offline + queue-length banners and drains on `online` event. | Punches captured offline survive reload and replay automatically when network returns. |
+| 8 | Site-of-day briefing acknowledgement gate | Briefing was shown but not enforced | [`Punch.tsx`](apps/web/src/routes/worker/Punch.tsx) now blocks IN punches until the worker ticks the ack checkbox. Punch payload carries `acknowledgedBriefingId` to `punch-submit`, which writes it to `attendance.briefing_acknowledged_id`. | OUT punches still allowed without ack. |
+| 9 | Polygon geofence preview | Admin used circle (lat/lng + radius) only with no map visual | [`SiteMapPreview.tsx`](apps/web/src/components/SiteMapPreview.tsx) — Leaflet + OSM map showing site marker + circle. Embedded inline on each site card in Admin Sites. | Polygon **drawing** still post-MVP — preview renders the existing circle. |
+| 10 | Daily site report submission UI | Schema only, no form | [`DailyReport.tsx`](apps/web/src/routes/supervisor/DailyReport.tsx) — supervisor picks site, enters weather/headcount/work-completed/blockers/notes, submits to `daily_site_reports`. Pre-fills attendance headcount automatically. Idempotent (one row per site per day). | New tile on the supervisor dashboard. |
+| 11 | E2E test scaffold | None | [`apps/web/playwright.config.ts`](apps/web/playwright.config.ts) + [`apps/web/e2e/home.spec.ts`](apps/web/e2e/home.spec.ts) — 3 smoke tests for the home, worker login, supervisor login routes. | Run with `pnpm test:e2e` after `pnpm test:e2e:install` (downloads Chromium). |
+
+### 21c. Known follow-ups (deferred deliberately)
+
+These were flagged by the review but not urgent for the next deploy. Tracked here so they don't fall off:
+
+- **Selfie metadata cross-validation** — full implementation per [docs/feat-selfie-metadata-validation.md](docs/feat-selfie-metadata-validation.md). Spec written, schema column reserved.
+- **Selfie watermark with device fingerprint hash + ULID overlay** — current overlay shows timestamp + GPS only.
+- **Photo compression quality ladder** — currently fixed JPEG quality 0.7; spec calls for 0.7→0.6→0.5→0.4 ladder targeting ≤100KB.
+- **Auto-close cron timezone math** — uses naïve UTC; need IANA TZ-aware arithmetic via `Temporal` once Deno ships it stable.
+- **Selfie retention cron project-level config** — currently uses defaults; should read `projects.retention_days`.
+- **2FA TOTP for supervisors** — Supabase Auth supports it; UI not wired.
+- **PIN reset flow** for workers — supervisor-mediated request UI not built.
+- **Forgot-PIN recovery** — workers stuck if they forget; need supervisor reset path.
+- **Worker brute-force lockout** — schema fields exist (`failed_login_count`, `locked_until`) but `signInWithPassword` doesn't read them. Either add a custom Edge Function gating sign-in or document Supabase's built-in rate limit as our control.
+- **Worker password entropy** — synthetic password = `pin + workerId.slice(0,8)` and `workerId` is queryable for the pick-list. Effective entropy is just the PIN. Either accept the risk (low — supervisor still reviews) or add a per-worker secret.
+- **CSP / security headers** — add `_headers` file for Cloudflare Pages.
+- **Code-split admin and supervisor routes** — bundle is 654 KB unminified (196 KB gzipped). Lazy-load.
+- **Error boundaries** — a thrown error in any route renders blank.
+- **`.gitattributes` with `* text=auto eol=lf`** — eliminate the CRLF warnings on every commit.
+- **Anomaly notification delivery** — `notification_outbox` table not yet created; anomaly rules fire but write nowhere. Wire in v1.1.
+
+### 21d. Feature status (consolidated)
+
+Updated since [§18](#18-revised-mvp-scope-delta). ✅ = shipped + verified · 🟡 = scaffold/skeleton · ⏳ = deferred.
+
+| Feature | Status | Reference |
+|---|---|---|
+| Worker auth via Supabase synthetic emails | ✅ | M2 |
+| Worker register + login UI | ✅ | M2 |
+| Camera + GPS + device fingerprint capture | ✅ | M3 |
+| Punch flow end-to-end with anomaly detection | ✅ | M4 |
+| Selfie watermark (timestamp + GPS) | 🟡 (no device hash / ULID) | M3 |
+| Client-side photo compression | 🟡 (no quality ladder) | M3 |
+| Supervisor dashboard with realtime feed | ✅ | M5 |
+| Pending approvals queue | ✅ | M5 |
+| Anomaly pane + bulk verify | ✅ | M5 |
+| Admin CRUD (projects / sites / workers) | ✅ | M6 |
+| Site map preview (Leaflet) | ✅ M9 | M6+M9 |
+| Audit log viewer (server-side trigger writes) | ✅ M9 | M6+M9 |
+| Payroll CSV export with auto-close gate | ✅ | M7 |
+| Hindi locale | ✅ | M7 |
+| PWA install prompt | ✅ | M7 |
+| Daily site report form | ✅ M9 | M9 |
+| Auto-close shifts cron | 🟡 (UTC tz math) | M8 |
+| Selfie retention cron | 🟡 (no project config) | M8 |
+| Operations runbook | ✅ | M8 |
+| IndexedDB offline queue + briefing ack gate | ✅ M9 | M9 |
+| Auto-spawn `supabase functions serve` in `pnpm dev` | ✅ M9 | M9 |
+| Server-side audit trigger | ✅ M9 | M9 |
+| Auto-ban auth user on offboarding | ✅ M9 | M9 |
+| E2E smoke test (3 routes) | ✅ M9 | M9 |
+| Selfie metadata cross-validation | ⏳ | spec only |
+| 2FA TOTP for supervisors | ⏳ | |
+| Polygon-drawing geofence editor | ⏳ | preview only |
+| PIN reset / forgot-PIN flows | ⏳ | |
+| Worker brute-force lockout enforced | ⏳ | schema only |
+| Anomaly notification delivery | ⏳ | mocked |
+
+---
+
 ## 20. Sources (2026 references used in §13–§19)
 
 - [Top 6 Geofencing Time Clock Apps 2026 — Truein](https://truein.com/blogs/best-geofencing-time-clock-apps-for-employees)

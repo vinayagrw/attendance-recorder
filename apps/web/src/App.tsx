@@ -9,6 +9,7 @@ import SupervisorLogin from './routes/supervisor/Login'
 import SupervisorDashboard from './routes/supervisor/Dashboard'
 import SupervisorApprovals from './routes/supervisor/Approvals'
 import SupervisorReports from './routes/supervisor/Reports'
+import SupervisorDailyReport from './routes/supervisor/DailyReport'
 import InstallPrompt from './components/InstallPrompt'
 import AdminProjects from './routes/admin/Projects'
 import AdminSites from './routes/admin/Sites'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="dashboard" element={<SupervisorDashboard />} />
           <Route path="approvals" element={<SupervisorApprovals />} />
           <Route path="reports" element={<SupervisorReports />} />
+          <Route path="daily-report" element={<SupervisorDailyReport />} />
         </Route>
       </Route>
 

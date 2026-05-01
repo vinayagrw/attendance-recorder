@@ -30,11 +30,9 @@ export default function WorkerLogin() {
   const { data: workers, isPending } = useQuery({
     queryKey: ['worker-pick-list'],
     queryFn: async (): Promise<PickListWorker[]> => {
-      const { data, error } = await supabase
-        .from('workers')
-        .select('id, full_name, status')
-        .in('status', ['invited', 'pending_approval', 'active'])
-        .order('full_name')
+      // Anon-readable RPC — RLS-bypassing security-definer fn that returns
+      // only id/full_name/status. See migration 0009.
+      const { data, error } = await supabase.rpc('list_active_workers')
       if (error) throw error
       return (data as PickListWorker[]) ?? []
     },

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
+import SiteMapPreview from '@/components/SiteMapPreview'
 
 interface Site {
   id: string
@@ -119,6 +120,16 @@ export default function AdminSites() {
             <div className="text-xs text-slate-500">
               {s.default_lat?.toFixed(5)}, {s.default_lng?.toFixed(5)} · {s.default_radius_m} m · {s.timezone}
             </div>
+            {s.default_lat != null && s.default_lng != null && (
+              <div className="mt-2">
+                <SiteMapPreview
+                  lat={s.default_lat}
+                  lng={s.default_lng}
+                  radiusM={s.default_radius_m ?? 150}
+                  height={160}
+                />
+              </div>
+            )}
             <textarea
               className="mt-2 w-full rounded-lg border border-slate-200 p-2 text-sm"
               rows={2}

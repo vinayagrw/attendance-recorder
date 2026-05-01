@@ -30,12 +30,10 @@ export default function WorkerRegister() {
   const { data: workers } = useQuery({
     queryKey: ['worker-register-pick-list'],
     queryFn: async (): Promise<PickListWorker[]> => {
-      const { data } = await supabase
-        .from('workers')
-        .select('id, full_name, status')
-        .in('status', ['invited', 'pending_approval'])
-        .order('full_name')
-      return (data as PickListWorker[]) ?? []
+      const { data } = await supabase.rpc('list_active_workers')
+      return ((data as PickListWorker[]) ?? []).filter((w) =>
+        ['invited', 'pending_approval'].includes(w.status),
+      )
     },
   })
 

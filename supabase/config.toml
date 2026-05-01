@@ -41,3 +41,9 @@ enable_confirmations = false
 [edge_runtime]
 enabled = true
 inspector_port = 8083
+
+[analytics]
+# Disabled: the analytics container requires Docker daemon on
+# tcp://localhost:2375 (not exposed by default on Windows) and isn't
+# needed for local development.
+enabled = false

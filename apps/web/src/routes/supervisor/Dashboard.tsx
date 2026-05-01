@@ -98,12 +98,23 @@ export default function SupervisorDashboard() {
         </button>
       </div>
 
-      <Link
-        to="/supervisor/approvals"
-        className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900 hover:bg-blue-100"
-      >
-        Pending approvals: <strong>{pendingCount ?? 0}</strong> →
-      </Link>
+      <div className="grid grid-cols-3 gap-2">
+        <Link to="/supervisor/approvals"
+          className="rounded-xl bg-blue-50 p-3 text-center text-xs text-blue-900 hover:bg-blue-100">
+          Approvals
+          <div className="text-lg font-bold">{pendingCount ?? 0}</div>
+        </Link>
+        <Link to="/supervisor/reports"
+          className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-800 hover:bg-slate-200">
+          Reports
+          <div className="text-lg font-bold">CSV</div>
+        </Link>
+        <Link to="/supervisor/daily-report"
+          className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-800 hover:bg-slate-200">
+          Daily report
+          <div className="text-lg font-bold">{new Date().getDate()}</div>
+        </Link>
+      </div>
 
       <section>
         <h2 className="mb-2 text-lg font-bold text-slate-900">
