@@ -73,6 +73,4 @@ Edge Functions need these secrets at runtime (set with `npx supabase secrets set
 - **Frontend** → Cloudflare Pages, auto-deploy on push to `main`. Build command `pnpm build`, output dir `apps/web/dist`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Pages env.
 - **Database & functions** → push migrations with `npx supabase db push`; deploy functions with `npx supabase functions deploy <name>`.
 
-## License
 
-UNLICENSED (private project — pick a license before going commercial).

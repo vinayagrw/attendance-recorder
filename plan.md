@@ -606,40 +606,61 @@ Things real customers complained about on Capterra / G2 / Reddit in 2026 — des
 
 ## 18. Revised MVP Scope (Delta)
 
-These items move into the MVP from the critique. Marked with **★ NEW**.
+Items added to MVP from the critique (§15) plus the deeper-research additions (§19a). Each "Spec" link below is the developer-facing implementation doc. **TBD** = needs a spec written before implementation.
 
 ### Worker app additions
-- ★ NEW Selfie quality check (face detected + brightness/sharpness) before submit
-- ★ NEW Client-side photo compression (≤100 KB)
-- ★ NEW Selfie watermark (timestamp + GPS overlay)
-- ★ NEW Connectivity indicator + queued-state banner via Service Worker
-- ★ NEW Site-of-day briefing shown above Punch button
-- ★ NEW Forgot-PIN flow (request → supervisor)
+
+| Feature | Status | Milestone | Spec |
+|---|---|---|---|
+| Selfie quality check (face detected + brightness/sharpness) | Approved | M4 | [feat-selfie-metadata-validation.md](docs/feat-selfie-metadata-validation.md) |
+| Selfie metadata cross-validation (NEW — anti-spoof) | Proposed | M4 | [feat-selfie-metadata-validation.md](docs/feat-selfie-metadata-validation.md) |
+| Client-side photo compression (≤100 KB) | Approved | M3 | [feat-photo-compression.md](docs/feat-photo-compression.md) |
+| Selfie watermark (timestamp + GPS + device-fingerprint hash) | Approved | M3 | [feat-selfie-watermark.md](docs/feat-selfie-watermark.md) |
+| Connectivity indicator + queued-state banner (Service Worker) | Approved | M4 | TBD |
+| Site-of-day briefing shown above Punch button | Approved | M4/M5 | [feat-site-of-day-briefing.md](docs/feat-site-of-day-briefing.md) |
+| Forgot-PIN flow (request → supervisor) | Approved | M5 | TBD |
 
 ### Supervisor / admin additions
-- ★ NEW Anomaly pane on dashboard (geofence_far / new_device / off_hours / buddy_punch)
-- ★ NEW Bulk verify
-- ★ NEW Web Push subscription for supervisor (pending approvals, anomalies)
-- ★ NEW 2FA via TOTP (Supabase Auth)
-- ★ NEW Polygonal geofence editor (Leaflet draw plugin; PostGIS `ST_Contains`)
-- ★ NEW PIN reset / lockout admin action
-- ★ NEW Multi-site assignment (`worker_site_assignments` table)
 
-### Schema deltas
-- Replace `sites.geofence_lat/lng/radius_m` with `sites.geofence geography(MultiPolygon)` + keep `default_radius_m` as fallback.
-- Replace `workers.assigned_site_id` with `worker_site_assignments(worker_id, site_id, valid_from, valid_to, primary)`.
-- Add `sites.daily_note text`.
-- Add `attendance.is_live_score real`, `attendance.face_quality_score real`.
-- Add `audit_log.prev_hash text`, `audit_log.row_hash text`; revoke UPDATE/DELETE.
-- Add `org_id uuid` on all tables (default value, single org for now) — multi-tenant insurance.
+| Feature | Status | Milestone | Spec |
+|---|---|---|---|
+| Anomaly pane on dashboard (geofence_far, new_device, off_hours, buddy_punch, etc.) | Approved | M5 | [feat-anomaly-detection.md](docs/feat-anomaly-detection.md) |
+| Mocked anomaly notification channel (`notification_outbox`) | Approved | M5 | [feat-anomaly-detection.md](docs/feat-anomaly-detection.md) |
+| Bulk verify | Approved | M5 | [feat-anomaly-detection.md](docs/feat-anomaly-detection.md) |
+| Web Push subscription for supervisor (mocked v1) | Approved | M5 | [feat-anomaly-detection.md](docs/feat-anomaly-detection.md) |
+| 2FA via TOTP (Supabase Auth) | Approved | M8 | TBD |
+| Polygonal geofence editor (Leaflet draw + PostGIS `ST_Contains`) | Approved | M6 | TBD |
+| PIN reset / lockout admin action | Approved | M6 | TBD |
+| Multi-site assignment (`worker_site_assignments`) | Approved | M6 | TBD (schema in `supabase/migrations/0001_init.sql`) |
+| Forgotten punch-out auto-correction | Approved | M8 | [feat-forgotten-punchout.md](docs/feat-forgotten-punchout.md) |
+| Daily site report (Raken-style) | Approved | M7 | [feat-daily-site-report.md](docs/feat-daily-site-report.md) |
+| Selfie storage lifecycle (retention + cleanup + GDPR) | Approved | M8 | [feat-selfie-storage-lifecycle.md](docs/feat-selfie-storage-lifecycle.md) |
+| Payroll integration (CSV in v1, named integrations later) | Mocked v1 | M7 (CSV) / Post-MVP (deeper) | [feat-payroll-integration.md](docs/feat-payroll-integration.md) |
+
+### Schema deltas (consolidated)
+
+- Replace `sites.geofence_lat/lng/radius_m` with `sites.geofence geography(MultiPolygon, 4326)` + keep `default_lat/lng/radius_m` as fallback. *(Already in `0001_init.sql`.)*
+- Replace `workers.assigned_site_id` with `worker_site_assignments(worker_id, site_id, valid_from, valid_to, is_primary)`. *(Already in `0001_init.sql`.)*
+- Add `sites.daily_note text` + history table `site_briefings` (+ trigger). *(See `feat-site-of-day-briefing.md`.)*
+- Add `attendance.is_live_score real`, `attendance.face_quality_score real`, `attendance.face_match_score real` *(stub)*. *(Already in `0001_init.sql`.)*
+- Add `attendance.selfie_metadata jsonb`, `attendance.selfie_sha256 text`, `attendance.capture_method text`. *(See `feat-selfie-metadata-validation.md`.)*
+- Add `attendance.max_flag_severity text` + `sites.rule_overrides jsonb` + `sites.shift_window_local jsonb`. *(See `feat-anomaly-detection.md`.)*
+- Add `audit_log.prev_hash`, `audit_log.row_hash`; revoke UPDATE/DELETE. *(Already in `0003_audit_chain.sql`.)*
+- Add `notification_outbox` table. *(See `feat-anomaly-detection.md`.)*
+- Add `daily_site_reports` table + `site-reports` storage bucket. *(See `feat-daily-site-report.md`.)*
+- Add `projects.retention_days jsonb`, `workers.erased boolean`. *(See `feat-selfie-storage-lifecycle.md`.)*
+- Add `org_id uuid` on all tables (default value, single org for now) — multi-tenant insurance. *(Already in `0001_init.sql`.)*
 
 ### Milestone changes
-- M3 expands: add quality check + compression + watermark + liveness ONNX model integration.
-- M5 expands: anomaly pane, bulk verify, push subscription.
-- M6 expands: polygon editor, PIN reset, multi-site assignment.
-- M8 expands: TOTP enrolment, audit hash chain, retention cron.
 
-Estimated added time vs. original v1 plan: **~5–7 working days**.
+- **M3** expands: photo compression + watermark + selfie metadata capture (no liveness model yet).
+- **M4** expands: site-of-day briefing display + connectivity indicator + selfie quality client-side checks.
+- **M5** expands: anomaly pane, bulk verify, mocked push subscription, forgot-PIN flow, supervisor-edited briefing, mocked anomaly notifications.
+- **M6** expands: polygon editor, PIN reset/lockout, multi-site assignment UI, admin storage view (lite).
+- **M7** expands: payroll CSV export with pre-flight gates + daily site report (full).
+- **M8** expands: TOTP enrolment, audit hash chain (already wired), retention cron, auto-close cron, GDPR erase admin action.
+
+Estimated added time vs. original v1 plan: **~7–10 working days** (raised from earlier estimate of 5–7 to account for daily-site-report, forgotten-punch-out, and storage-lifecycle work that wasn't in the first critique).
 
 ---
 

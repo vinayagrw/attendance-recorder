@@ -39,5 +39,13 @@ lerna-debug.log*
 # coverage
 coverage/
 
-# claude artefacts (kept out of source repo)
+# claude / IDE / MCP / skills artefacts (kept out of source repo)
 .claude/
+.agents/
+.junie/
+.mcp.json
+skills-lock.json
+plan.md.draft
+# we use pnpm only — guard against accidental npm/yarn lockfiles
+package-lock.json
+yarn.lock

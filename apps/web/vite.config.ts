@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 
 export default defineConfig({
+  // Accept both VITE_* and NEXT_PUBLIC_* prefixes so the .env.example values
+  // copied from Supabase's docs (Next.js style) work without renaming.
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   plugins: [
     react(),
     VitePWA({
