@@ -7,6 +7,7 @@ import RoleScaffold from '../_RoleScaffold'
 import { signInWithPassword } from '@/lib/auth'
 import { useSession } from '@/hooks/useSession'
 import { logger } from '@/lib/logger'
+import { logAccess } from '@/lib/trafficLog'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -42,9 +43,22 @@ export default function SupervisorLogin() {
         module: 'SupervisorLogin',
         email: values.email,
       })
+      void logAccess({
+        eventType: 'login_fail',
+        actorType: 'supervisor',
+        actorLabel: values.email,
+        route: '/supervisor/login',
+        metadata: { reason: result.error },
+      })
       setServerError(result.error)
     } else {
       logger.info('supervisor login ok', { module: 'SupervisorLogin', email: values.email })
+      void logAccess({
+        eventType: 'login',
+        actorType: 'supervisor',
+        actorLabel: values.email,
+        route: '/supervisor/login',
+      })
     }
     // session change will trigger the useEffect above
   }

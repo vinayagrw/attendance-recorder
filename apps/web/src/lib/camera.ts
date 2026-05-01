@@ -3,6 +3,50 @@ export interface CapturedSelfie {
   dataUrl: string
   widthPx: number
   heightPx: number
+  byteSize: number
+  mimeType: string
+  sha256: string | null
+  captureMs: number
+  watermarked: boolean
+  cameraTrack: {
+    label: string | null
+    deviceId: string | null
+    facingMode: string | null
+    width: number | null
+    height: number | null
+    frameRate: number | null
+    aspectRatio: number | null
+  } | null
+}
+
+async function sha256Hex(blob: Blob): Promise<string | null> {
+  if (!('crypto' in window) || !crypto.subtle) return null
+  try {
+    const buf = await blob.arrayBuffer()
+    const digest = await crypto.subtle.digest('SHA-256', buf)
+    return [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+  } catch {
+    return null
+  }
+}
+
+function readTrackInfo(video: HTMLVideoElement): CapturedSelfie['cameraTrack'] {
+  const stream = video.srcObject as MediaStream | null
+  if (!stream) return null
+  const track = stream.getVideoTracks()[0]
+  if (!track) return null
+  const settings = (track.getSettings ? track.getSettings() : {}) as MediaTrackSettings
+  return {
+    label: track.label || null,
+    deviceId: settings.deviceId ?? null,
+    facingMode: settings.facingMode ?? null,
+    width: settings.width ?? null,
+    height: settings.height ?? null,
+    frameRate: settings.frameRate ?? null,
+    aspectRatio: settings.aspectRatio ?? null,
+  }
 }
 
 export async function startSelfieStream(
@@ -48,6 +92,8 @@ export async function captureSelfie(
   maxLongEdgePx = 800,
   jpegQuality = 0.7,
 ): Promise<CapturedSelfie> {
+  const t0 = performance.now()
+  const trackInfo = readTrackInfo(video)
   const srcW = video.videoWidth
   const srcH = video.videoHeight
 
@@ -123,10 +169,19 @@ export async function captureSelfie(
     tryEncode('image/jpeg', jpegQuality)
   })
 
+  const dataUrl = canvas.toDataURL('image/jpeg', jpegQuality)
+  const sha256 = await sha256Hex(blob)
+
   return {
     blob,
-    dataUrl: canvas.toDataURL('image/jpeg', jpegQuality),
+    dataUrl,
     widthPx: w,
     heightPx: h,
+    byteSize: blob.size,
+    mimeType: blob.type || 'image/jpeg',
+    sha256,
+    captureMs: Math.round(performance.now() - t0),
+    watermarked: !!watermark,
+    cameraTrack: trackInfo,
   }
 }

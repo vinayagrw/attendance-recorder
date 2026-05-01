@@ -15,11 +15,13 @@ language sql stable as $$
             w.id as worker_id, w.full_name as worker_name, w.phone,
             p.name as project_name, s.name as site_name, s.timezone,
             (a.punched_at at time zone s.timezone)::date as work_date,
-            a.type, a.punched_at, a.status as punch_status, a.flag_reasons
+            a.type, a.punched_at, a.status as punch_status,
+            fr as flag_reason
         from attendance a
         join workers w  on w.id = a.worker_id
         join sites s    on s.id = a.site_id
         join projects p on p.id = s.project_id
+        left join lateral unnest(a.flag_reasons) fr on true
         where (a.punched_at at time zone s.timezone)::date between p_start and p_end
           and (p_project_id is null or p.id = p_project_id)
           and (p_site_id is null or s.id = p_site_id)
@@ -29,14 +31,14 @@ language sql stable as $$
                min(case when type='in'  then punched_at end) as clock_in,
                max(case when type='out' then punched_at end) as clock_out,
                max(punch_status) as status,
-               array_remove(array_agg(distinct unnest(flag_reasons)), null) as flags
+               array_remove(array_agg(distinct flag_reason), null) as flags
         from day_rows
         group by worker_id, worker_name, phone, project_name, site_name, work_date
     )
     select worker_id, worker_name, phone, project_name, site_name, work_date,
            clock_in, clock_out,
            case when clock_out is not null and clock_in is not null
-                then round(extract(epoch from (clock_out - clock_in)) / 3600.0, 2)
+                then round((extract(epoch from (clock_out - clock_in)) / 3600.0)::numeric, 2)
                 else null end as hours_worked,
            status,
            array_to_string(flags, ';') as flag_reasons

@@ -18,10 +18,15 @@ interface PunchBody {
   userAgent: string
   attendanceId?: string
   selfieMetadata?: Record<string, unknown>
+  selfieSha256?: string | null
+  captureMethod?: string
   acknowledgedBriefingId?: string | null
 }
 
-const MAX_GPS_ACCURACY_M = 80
+// GPS accuracy threshold: only flag if uncertainty radius > 100 m. Construction
+// sites with metal / concrete routinely produce 30–80 m accuracy even when the
+// worker is physically on site, so 80 was too tight (caused false positives).
+const MAX_GPS_ACCURACY_M = 100
 const DRIVING_THRESHOLD_MS = 8 / 3.6
 const IMPLAUSIBLE_SPEED_MS = 33
 
@@ -134,6 +139,10 @@ Deno.serve(async (req) => {
     status: flags.length === 0 ? 'pending' : 'flagged',
     flag_reasons: flags,
     briefing_acknowledged_id: body.acknowledgedBriefingId ?? null,
+    // M15 — richer digital footprint stored verbatim for forensic review
+    selfie_metadata: body.selfieMetadata ?? {},
+    selfie_sha256: body.selfieSha256 ?? null,
+    capture_method: body.captureMethod ?? null,
   }
   if (body.attendanceId) insert.id = body.attendanceId
 
@@ -152,6 +161,32 @@ Deno.serve(async (req) => {
     ip_address: ip,
     lat: body.gps.lat,
     lng: body.gps.lng,
+    // store the broader device snapshot for traffic correlation
+    metadata: {
+      attendance_id: row.id,
+      capture_method: body.captureMethod ?? null,
+      selfie_sha256: body.selfieSha256 ?? null,
+      device: (body.selfieMetadata as Record<string, unknown> | undefined)?.device ?? null,
+      camera: (body.selfieMetadata as Record<string, unknown> | undefined)?.camera ?? null,
+    },
+  })
+
+  // also fire a 'login'-style traffic event so /admin/traffic captures the punch
+  await sb.from('access_events').insert({
+    actor_type: 'worker',
+    actor_id: worker.id,
+    event_type: 'page_view',
+    route: '/worker/punch',
+    user_agent: body.userAgent,
+    device_fingerprint: body.deviceFingerprint,
+    ip_address: ip,
+    metadata: {
+      action: 'punch_submit',
+      type: body.type,
+      site_id: body.siteId,
+      attendance_id: row.id,
+      device: (body.selfieMetadata as Record<string, unknown> | undefined)?.device ?? null,
+    },
   })
 
   return cors(

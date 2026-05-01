@@ -34,6 +34,17 @@ truncate table device_logs restart identity cascade;
 truncate table daily_site_reports restart identity cascade;
 truncate table worker_site_assignments restart identity cascade;
 truncate table workers restart identity cascade;
+-- Optional tables — only truncate if they exist (older snapshots may not have them)
+do $cleanup$
+begin
+    if to_regclass('public.pin_reset_requests') is not null then
+        execute 'truncate table pin_reset_requests restart identity cascade';
+    end if;
+    if to_regclass('public.access_events') is not null then
+        execute 'truncate table access_events restart identity cascade';
+    end if;
+end
+$cleanup$;
 
 -- Wipe synthetic worker auth users so registration can be re-tested cleanly
 delete from auth.users where email like '%@worker.local';

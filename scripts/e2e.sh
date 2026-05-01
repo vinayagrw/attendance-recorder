@@ -257,13 +257,302 @@ ANIL_LOGIN_AFTER_BAN=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=passwo
 test_case "offboarded Anil cannot sign in (banned_until trigger)" "$ANIL_LOGIN_AFTER_BAN" '"error_description"|"error":|"msg":'
 
 echo ""
-echo -e "${YELLOW}=== Phase 14: Reset state for clean re-runs ===${RESET}"
+echo -e "${YELLOW}=== Phase 14 (M9): list_active_workers RPC returns ≥2 active ===${RESET}"
+# Phase 13 already offboarded Anil, so we only expect Ravi + Priya here.
+# Response is multi-line JSON — strip newlines so the regex matches.
+SITES_PUB=$(curl -s -X POST "$API_URL/rest/v1/rpc/list_active_workers" \
+    -H "apikey: $ANON_KEY" -H "Content-Type: application/json" -d '{}' | tr -d '\n')
+test_case "list_active_workers includes Ravi Kumar" "$SITES_PUB" '"Ravi Kumar"'
+test_case "list_active_workers includes Priya Singh" "$SITES_PUB" '"Priya Singh"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 15 (M13): list_assignable_sites returns is_assigned flag ===${RESET}"
+ASSIGN=$(curl -s -X POST "$API_URL/rest/v1/rpc/list_assignable_sites" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer ${WORKER_TOKENS[33333333-3333-3333-3333-333333333333]}" \
+    -H "Content-Type: application/json" \
+    -d '{"p_worker_id":"33333333-3333-3333-3333-333333333333"}')
+test_case "list_assignable_sites returns Tower A with is_assigned" "$ASSIGN" '"is_assigned":true'
+
+echo ""
+echo -e "${YELLOW}=== Phase 16 (M14): GPS accuracy 95m does NOT flag low_gps_accuracy ===${RESET}"
+PUNCH_95=$(curl -s -X POST "$API_URL/functions/v1/punch-submit" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer ${WORKER_TOKENS[33333333-3333-3333-3333-333333333333]}" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"siteId\":\"22222222-2222-2222-2222-222222222222\",
+        \"type\":\"in\",
+        \"selfieDataUrl\":\"$SELFIE_DATAURL\",
+        \"gps\":{\"lat\":12.9698,\"lng\":77.7500,\"accuracy_m\":95,\"speed_ms\":null},
+        \"deviceFingerprint\":\"e2e-fp-acc95\",
+        \"userAgent\":\"e2e-test\"
+    }")
+echo "$PUNCH_95" | grep -q 'low_gps_accuracy' && \
+    { echo -e "  ${RED}✗${RESET} 95m should NOT flag low_gps_accuracy"; FAIL=$((FAIL+1)); } || \
+    { echo -e "  ${GREEN}✓${RESET} 95m does NOT flag low_gps_accuracy (threshold raised to 100m)"; PASS=$((PASS+1)); }
+
+echo ""
+echo -e "${YELLOW}=== Phase 17: GPS accuracy 150m DOES flag low_gps_accuracy ===${RESET}"
+PUNCH_150=$(curl -s -X POST "$API_URL/functions/v1/punch-submit" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer ${WORKER_TOKENS[33333333-3333-3333-3333-333333333333]}" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"siteId\":\"22222222-2222-2222-2222-222222222222\",
+        \"type\":\"out\",
+        \"selfieDataUrl\":\"$SELFIE_DATAURL\",
+        \"gps\":{\"lat\":12.9698,\"lng\":77.7500,\"accuracy_m\":150,\"speed_ms\":null},
+        \"deviceFingerprint\":\"e2e-fp-acc150\",
+        \"userAgent\":\"e2e-test\"
+    }")
+test_case "150m accuracy flags low_gps_accuracy" "$PUNCH_150" '"low_gps_accuracy"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 18 (M13): in_motion + impossible_speed flags ===${RESET}"
+# Use Ravi (Anil is offboarded by Phase 13).
+PUNCH_FAST=$(curl -s -X POST "$API_URL/functions/v1/punch-submit" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer ${WORKER_TOKENS[33333333-3333-3333-3333-333333333333]}" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"siteId\":\"22222222-2222-2222-2222-222222222222\",
+        \"type\":\"in\",
+        \"selfieDataUrl\":\"$SELFIE_DATAURL\",
+        \"gps\":{\"lat\":12.9698,\"lng\":77.7500,\"accuracy_m\":15,\"speed_ms\":40},
+        \"deviceFingerprint\":\"e2e-fp-driving\",
+        \"userAgent\":\"e2e-test\"
+    }")
+test_case "speed 40 m/s triggers in_motion + impossible_speed" "$PUNCH_FAST" '"in_motion".*"impossible_speed"|"impossible_speed".*"in_motion"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 19 (M14): worker forgot-PIN flow end-to-end ===${RESET}"
+# Re-activate Anil first (Phase 13 offboarded him); his auth user is needed for the new PIN to work.
+curl -s -X PATCH "$API_URL/rest/v1/workers?id=eq.55555555-5555-5555-5555-555555555555" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"active"}' > /dev/null
+
+# Anon worker creates a pin reset request with their requested PIN. We do NOT
+# use Prefer: return=representation because the supervisors-only SELECT policy
+# would block the implicit SELECT-back. Just check the HTTP status, then have
+# the supervisor read the request id back to drive the next steps.
+PIN_REQ_BODY='{"worker_id":"55555555-5555-5555-5555-555555555555","note":"Forgot PIN, requesting reset","requested_pin":"7777"}'
+PIN_REQ_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/rest/v1/pin_reset_requests" \
+    -H "apikey: $ANON_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$PIN_REQ_BODY")
+test_case "anon insert pin_reset_request (HTTP 201)" "$PIN_REQ_CODE" '^201$'
+
+# Supervisor reads the latest pending request to grab its id
+PEND=$(curl -s "$API_URL/rest/v1/pin_reset_requests?status=eq.pending&worker_id=eq.55555555-5555-5555-5555-555555555555&order=requested_at.desc&limit=1" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN")
+test_case "supervisor sees the pending request with requested_pin=7777" "$PEND" '"requested_pin":[[:space:]]*"7777"'
+REQ_ID=$(echo "$PEND" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+echo "  request id: $REQ_ID"
+
+# Supervisor approves via requestId — Edge Function reads requested_pin from DB
+APPROVE=$(curl -s -X POST "$API_URL/functions/v1/worker-pin-reset" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"requestId\":\"$REQ_ID\"}")
+test_case "supervisor approves via requestId" "$APPROVE" '"ok":true'
+
+LOGIN_NEW=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
+    -H "apikey: $ANON_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"55555555-5555-5555-5555-555555555555@worker.local","password":"7777-55555555"}')
+test_case "Anil can sign in with new PIN" "$LOGIN_NEW" '"access_token"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 20 (M14): site daily_note + daily_note_updated_at column ===${RESET}"
+NOTE_UPDATE=$(curl -s -X PATCH "$API_URL/rest/v1/sites?id=eq.22222222-2222-2222-2222-222222222222" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" \
+    -d "{\"daily_note\":\"E2E test briefing $(date +%s)\",\"daily_note_updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+test_case "site briefing update with daily_note_updated_at" "$NOTE_UPDATE" '"daily_note_updated_at"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 21 (M13): bulk verify multiple attendance rows ===${RESET}"
+# Grab two flagged attendance ids and verify both in one PATCH
+FLAGGED_IDS=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    select id from attendance where status = 'flagged' limit 2;
+" | tr -d ' ' | tr '\n' ',' | sed 's/,$//')
+FLAG_COUNT=$(echo "$FLAGGED_IDS" | tr ',' '\n' | grep -c -E '^[a-f0-9-]+$' || true)
+if [ "$FLAG_COUNT" -ge 2 ]; then
+    # PostgREST id=in.(uuid1,uuid2) — no quotes around uuids
+    BULK=$(curl -s -X PATCH "$API_URL/rest/v1/attendance?id=in.($FLAGGED_IDS)" \
+        -H "apikey: $ANON_KEY" \
+        -H "Authorization: Bearer $SUPER_TOKEN" \
+        -H "Content-Type: application/json" \
+        -H "Prefer: return=representation" \
+        -d '{"status":"verified"}')
+    VERIFIED_COUNT=$(echo "$BULK" | grep -oE '"status":"verified"' | wc -l | tr -d ' ')
+    test_case "bulk-verify ≥2 flagged rows in one PATCH" "$VERIFIED_COUNT" '^[2-9]$|^[1-9][0-9]+$'
+else
+    echo "  (only $FLAG_COUNT flagged row; skipping bulk-verify)"
+fi
+
+echo ""
+echo -e "${YELLOW}=== Phase 22 (M14): projects.address column accepts text ===${RESET}"
+PROJ_ADDR=$(curl -s -X POST "$API_URL/rest/v1/projects" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" \
+    -d '{
+        "name":"E2E Address Project",
+        "client_name":"E2E Client",
+        "address":"Plot 42, MG Road, Bengaluru 560001",
+        "status":"planning"
+    }')
+test_case "create project with full address" "$PROJ_ADDR" '"address":"Plot 42, MG Road, Bengaluru 560001"'
+NEW_PROJ_ID=$(echo "$PROJ_ADDR" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+echo "  project id: $NEW_PROJ_ID"
+
+# Edit it to update address
+PROJ_EDIT=$(curl -s -X PATCH "$API_URL/rest/v1/projects?id=eq.$NEW_PROJ_ID" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" \
+    -d '{"address":"Plot 99, Indiranagar, Bengaluru 560038","client_name":"Edited Client"}')
+test_case "edit project: new address persisted" "$PROJ_EDIT" '"address":"Plot 99, Indiranagar, Bengaluru 560038"'
+test_case "edit project: new client persisted"  "$PROJ_EDIT" '"client_name":"Edited Client"'
+
+# Cleanup
+curl -s -X DELETE "$API_URL/rest/v1/projects?id=eq.$NEW_PROJ_ID" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" > /dev/null
+
+echo ""
+echo -e "${YELLOW}=== Phase 23 (M15): access_events anon insert + supervisor read ===${RESET}"
+# Anon can insert page_view. NOTE: do NOT use Prefer: return=representation here —
+# the implicit SELECT-back is gated by the supervisors-only SELECT policy and
+# would (correctly) fail. Just check the HTTP status code.
+ACCESS_BODY='{"actor_type":"anon","event_type":"page_view","route":"/worker/login","user_agent":"e2e-test-agent","device_fingerprint":"e2e-fp-anon","metadata":{"language":"en-US","timezone":"Asia/Kolkata"}}'
+ACCESS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/rest/v1/access_events" \
+    -H "apikey: $ANON_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$ACCESS_BODY")
+test_case "anon can INSERT access_event (HTTP 201)" "$ACCESS_CODE" '^201$'
+
+# Supervisor reads via list_recent_traffic RPC
+TRAFFIC=$(curl -s -X POST "$API_URL/rest/v1/rpc/list_recent_traffic" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_limit":50}')
+test_case "supervisor reads list_recent_traffic" "$TRAFFIC" '"event_type":"page_view"|e2e-fp-anon'
+
+# Anon CANNOT read access_events directly (RLS denies)
+ACCESS_READ_ANON=$(curl -s "$API_URL/rest/v1/access_events?select=id&limit=1" \
+    -H "apikey: $ANON_KEY")
+test_case "anon CANNOT read access_events (RLS)" "$ACCESS_READ_ANON" '^\[\]$|"code":"42501"|"message":'
+
+echo ""
+echo -e "${YELLOW}=== Phase 24: traffic_summary RPC returns counters ===${RESET}"
+SUMMARY=$(curl -s -X POST "$API_URL/rest/v1/rpc/traffic_summary" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{}')
+test_case "traffic_summary returns total + page_views" "$SUMMARY" '"total":[0-9]+.*"page_views":[0-9]+'
+
+echo ""
+echo -e "${YELLOW}=== Phase 25 (M14): selfie_metadata + capture_method + selfie_sha256 stored ===${RESET}"
+# Re-activate Priya for one more punch with full metadata
+curl -s -X PATCH "$API_URL/rest/v1/workers?id=eq.44444444-4444-4444-4444-444444444444" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"active"}' > /dev/null
+
+PUNCH_META=$(curl -s -X POST "$API_URL/functions/v1/punch-submit" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer ${WORKER_TOKENS[44444444-4444-4444-4444-444444444444]}" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"siteId\":\"22222222-2222-2222-2222-222222222222\",
+        \"type\":\"in\",
+        \"selfieDataUrl\":\"$SELFIE_DATAURL\",
+        \"gps\":{\"lat\":12.9698,\"lng\":77.7500,\"accuracy_m\":15,\"speed_ms\":null},
+        \"deviceFingerprint\":\"e2e-fp-meta\",
+        \"userAgent\":\"e2e-test-meta\",
+        \"captureMethod\":\"camera\",
+        \"selfieSha256\":\"abc123def456\",
+        \"selfieMetadata\":{\"image\":{\"widthPx\":800,\"heightPx\":600,\"byteSize\":42},\"camera\":{\"facingMode\":\"user\"},\"device\":{\"timezone\":\"Asia/Kolkata\"}}
+    }")
+test_case "punch with metadata returns id" "$PUNCH_META" '"status":"pending"|"status":"flagged"'
+
+META_PUNCH_ID=$(echo "$PUNCH_META" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+META_ROW=$(curl -s "$API_URL/rest/v1/attendance?id=eq.$META_PUNCH_ID&select=selfie_metadata,capture_method,selfie_sha256" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN")
+# Postgres jsonb pretty-prints with whitespace ("timezone": "..."), accept either form.
+test_case "selfie_metadata.device.timezone persisted" "$META_ROW" '"timezone":[[:space:]]*"Asia/Kolkata"'
+test_case "capture_method=camera persisted" "$META_ROW" '"capture_method":"camera"'
+test_case "selfie_sha256 persisted" "$META_ROW" '"selfie_sha256":"abc123def456"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 26 (M13): audit log captures before/after diff ===${RESET}"
+AUDIT_DIFF=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    select count(*) from audit_log
+    where action = 'update_workers'
+      and before_state ? 'status'
+      and after_state ? 'status'
+      and before_state->>'status' <> after_state->>'status';
+")
+test_case "audit_log has ≥3 rows with status before/after diff" "$AUDIT_DIFF" '^[3-9]$|^[1-9][0-9]+$'
+
+echo ""
+echo -e "${YELLOW}=== Phase 27 (M13): project archive cascade closes sites ===${RESET}"
+# Create a tiny throwaway project + site, archive the project, observe site → closed
+ARCH_PROJ=$(curl -s -X POST "$API_URL/rest/v1/projects" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" \
+    -d '{"name":"E2E Archive Test","status":"active"}')
+ARCH_PROJ_ID=$(echo "$ARCH_PROJ" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+
+curl -s -X POST "$API_URL/rest/v1/sites" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"project_id\":\"$ARCH_PROJ_ID\",
+        \"name\":\"E2E archive site\",
+        \"default_lat\":12.97,\"default_lng\":77.75,
+        \"status\":\"active\"
+    }" > /dev/null
+
+# Archive the project — trigger should set its sites to 'closed'
+curl -s -X PATCH "$API_URL/rest/v1/projects?id=eq.$ARCH_PROJ_ID" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"status\":\"archived\",\"archived_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /dev/null
+
+ARCH_SITES=$(curl -s "$API_URL/rest/v1/sites?project_id=eq.$ARCH_PROJ_ID&select=name,status" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN")
+test_case "archive project cascades sites → closed" "$ARCH_SITES" '"status":"closed"'
+
+# Cleanup the throwaway
+curl -s -X DELETE "$API_URL/rest/v1/projects?id=eq.$ARCH_PROJ_ID" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" > /dev/null
+
+echo ""
+echo -e "${YELLOW}=== Phase 28: Final cleanup (reset state for clean re-runs) ===${RESET}"
 
 docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
     update workers set status='invited',
         pin_hash=null, baseline_selfie_url=null, auth_user_id=null,
         registered_at=null, approved_at=null, approved_by=null;
     delete from auth.users where email like '%@worker.local';
+    delete from pin_reset_requests;
+    delete from access_events where actor_label is null and (user_agent like 'e2e%' or user_agent is null);
 " > /dev/null 2>&1
 echo "  reset complete"
 

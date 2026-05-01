@@ -5,6 +5,7 @@ import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import { workerEmail, workerPassword } from '@/hooks/useWorker'
 import { useSession } from '@/hooks/useSession'
+import { logAccess } from '@/lib/trafficLog'
 
 interface PickListWorker {
   id: string
@@ -51,9 +52,24 @@ export default function WorkerLogin() {
     })
     setSubmitting(false)
     if (error) {
+      void logAccess({
+        eventType: 'login_fail',
+        actorType: 'worker',
+        actorId: workerId,
+        actorLabel: workers?.find((w) => w.id === workerId)?.full_name ?? null,
+        route: '/worker/login',
+        metadata: { reason: error.message },
+      })
       setError(error.message.includes('Invalid login') ? 'Wrong PIN' : error.message)
       return
     }
+    void logAccess({
+      eventType: 'login',
+      actorType: 'worker',
+      actorId: workerId,
+      actorLabel: workers?.find((w) => w.id === workerId)?.full_name ?? null,
+      route: '/worker/login',
+    })
   }
 
   return (

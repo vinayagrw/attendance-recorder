@@ -8,6 +8,7 @@ import { useWorker } from '@/hooks/useWorker'
 import { startSelfieStream, stopStream, captureSelfie } from '@/lib/camera'
 import { getCurrentLocation, metersBetween, type PunchLocation } from '@/lib/geolocation'
 import { getDeviceInfo } from '@/lib/deviceFingerprint'
+import { getDigitalFootprintJSON } from '@/lib/digitalFootprint'
 import { drainQueue, enqueuePunch, queueLength } from '@/lib/offlineQueue'
 import { logger } from '@/lib/logger'
 
@@ -19,6 +20,10 @@ interface PunchPayload {
   deviceFingerprint: string
   userAgent: string
   acknowledgedBriefingId?: string | null
+  // M15 — richer evidence for supervisor review
+  selfieMetadata?: Record<string, unknown>
+  selfieSha256?: string | null
+  captureMethod?: string
 }
 
 export default function WorkerPunch() {
@@ -192,6 +197,7 @@ export default function WorkerPunch() {
         lat: gps.lat,
         lng: gps.lng,
       })
+      const footprint = getDigitalFootprintJSON()
       const payload: PunchPayload = {
         siteId,
         type: nextType,
@@ -200,6 +206,21 @@ export default function WorkerPunch() {
         deviceFingerprint: device.fingerprint,
         userAgent: device.userAgent,
         acknowledgedBriefingId: briefing?.id ?? null,
+        captureMethod: 'camera',
+        selfieSha256: selfie.sha256,
+        selfieMetadata: {
+          image: {
+            widthPx: selfie.widthPx,
+            heightPx: selfie.heightPx,
+            byteSize: selfie.byteSize,
+            mimeType: selfie.mimeType,
+            sha256: selfie.sha256,
+            captureMs: selfie.captureMs,
+            watermarked: selfie.watermarked,
+          },
+          camera: selfie.cameraTrack,
+          device: footprint,
+        },
       }
 
       try {
