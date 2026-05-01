@@ -36,6 +36,8 @@ export default function WorkerPunch() {
   const [briefingAck, setBriefingAck] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
   const [queued, setQueued] = useState(0)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraTick, setCameraTick] = useState(0) // bump to retry stream
 
   // Bounce non-active workers
   useEffect(() => {
@@ -85,14 +87,20 @@ export default function WorkerPunch() {
     }
   }, [sites, siteId])
 
-  // Camera
+  // Camera — gated by `cameraTick` so a Retry button can re-trigger
   useEffect(() => {
     let cancelled = false
+    setCameraReady(false)
     if (videoRef.current && !streamRef.current) {
       startSelfieStream(videoRef.current)
         .then((s) => {
-          if (cancelled) stopStream(s)
-          else streamRef.current = s
+          if (cancelled) {
+            stopStream(s)
+            return
+          }
+          streamRef.current = s
+          setCameraReady(true)
+          setError(null)
         })
         .catch((e: Error) => {
           logger.error(e, { module: 'WorkerPunch', action: 'startSelfieStream', workerId: worker?.id })
@@ -104,7 +112,9 @@ export default function WorkerPunch() {
       stopStream(streamRef.current)
       streamRef.current = null
     }
-  }, [])
+    // worker?.id deliberately excluded so we don't restart the stream on auth state changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraTick])
 
   // GPS
   useEffect(() => {
@@ -170,6 +180,7 @@ export default function WorkerPunch() {
     setError(null)
     setInfo(null)
     if (!videoRef.current || !worker || !siteId) return setError('Not ready')
+    if (!cameraReady) return setError('Camera still warming up — wait a moment and try again')
     if (!gps) return setError('Waiting for GPS — try again in a moment')
     if (briefingGate) return setError('Read and acknowledge the briefing first')
 
@@ -278,8 +289,24 @@ export default function WorkerPunch() {
         ))}
       </select>
 
-      <div className="overflow-hidden rounded-xl bg-black">
+      <div className="relative overflow-hidden rounded-xl bg-black">
         <video ref={videoRef} className="w-full" playsInline muted />
+        {!cameraReady && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-white">
+            <div className="text-sm">Warming up camera…</div>
+            <button
+              type="button"
+              onClick={() => {
+                stopStream(streamRef.current)
+                streamRef.current = null
+                setCameraTick((t) => t + 1)
+              }}
+              className="rounded-md bg-white/20 px-3 py-1 text-xs"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl bg-white p-3 text-sm shadow-sm">
@@ -306,10 +333,14 @@ export default function WorkerPunch() {
         type="button"
         className="btn-primary"
         onClick={handlePunch}
-        disabled={!!submitting || !worker || !siteId || briefingGate}
+        disabled={!!submitting || !worker || !siteId || briefingGate || !cameraReady || !gps}
       >
         {submitting
           ? `Submitting ${submitting.toUpperCase()}…`
+          : !cameraReady
+          ? 'Waiting for camera…'
+          : !gps
+          ? 'Waiting for GPS…'
           : `Punch ${nextType.toUpperCase()}`}
       </button>
 
