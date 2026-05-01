@@ -867,6 +867,92 @@ What's still missing (deferred to next pass): unit tests for `metersBetween`, wa
 
 ---
 
+## 23. Self-registration, filtered reports, and app-wide logging (M12)
+
+User-facing scope additions plus operational hardening, driven by feedback in the field.
+
+### 23a. Field bugs & UX gaps fixed
+
+| # | Issue | Fix |
+|---|---|---|
+| 1 | `toBlob failed` on punch (Vinay's worker) — cryptic, app stuck | [`camera.ts`](apps/web/src/lib/camera.ts): wait for `video.readyState >= 2` (HAVE_CURRENT_DATA) before capture, validate `videoWidth`/`videoHeight` non-zero, fall back to PNG if JPEG encoding refused. Now surfaces a friendly "Camera not ready yet — please wait a moment and try again" instead of a stack-tracey throw. |
+| 2 | Self-created test project's site didn't show up on the worker punch screen | Was actually correct behaviour (workers see only assigned sites) — but UX surfaced via the new [`WorkerAssignments`](apps/web/src/components/WorkerAssignments.tsx) inline manager on `/admin/workers` from M11. Confirmed working in M12 retest. |
+| 3 | Worker not in the seeded list had nowhere to go | New self-registration flow — see §23b. |
+| 4 | No way to find a single punch among hundreds of rows | Filtered reports viewer — see §23c. |
+| 5 | App errors swallowed silently in catch blocks; no diagnostics for the user | App-wide logger — see §23d. |
+
+### 23b. Self-registration ([`worker-register/index.ts`](supabase/functions/worker-register/index.ts) + [`worker/Register.tsx`](apps/web/src/routes/worker/Register.tsx))
+
+Workers whose names aren't pre-seeded can now register themselves:
+
+1. On `/worker/register`, two toggle modes — **"I'm in the list"** (existing dropdown flow) and **"I'm not in the list"** (free-form name + phone + site).
+2. Self-registration enters the `worker-register` Edge Function with `newWorker: { fullName, phone, siteId }` instead of `workerId`.
+3. The function creates `workers` + `worker_site_assignments` + auth user in one round-trip, then proceeds with the standard selfie/baseline flow.
+4. Status remains `pending_approval` — supervisor still gates final access.
+
+New anon-readable RPC `list_active_sites()` ([migration 0012](supabase/migrations/0012_self_register_and_filters.sql)) feeds the site dropdown without requiring auth — same SECURITY DEFINER pattern used for `list_active_workers()`.
+
+### 23c. Filtered reports viewer ([`/supervisor/reports-list`](apps/web/src/routes/supervisor/ReportsList.tsx))
+
+Drives off a single `attendance_filtered()` RPC ([migration 0012](supabase/migrations/0012_self_register_and_filters.sql)) that joins workers + sites + projects server-side and accepts:
+
+- `p_start` / `p_end` — date range (default last 7 days)
+- `p_project_id` / `p_site_id` / `p_worker_id` — drill-down filters (cascading: site list filters by selected project)
+- `p_status` — pending / verified / flagged / rejected / auto_closed
+- `p_type` — in / out
+- `p_limit` / `p_offset` — paginated, 100 per page
+
+UI affordances:
+- 4 grouping modes — flat, by project, by worker, by day
+- Summary tiles — total / verified / flagged / pending / auto-closed / unique workers · sites
+- Each row links to `/supervisor/edit-punch/:id` for inline edits
+- Status badges use the same colour palette as the dashboard (consistency with the existing design system)
+
+Dashboard tile reshuffled — supervisor home now shows 4 squares: Approvals · Reports (filter) · Payroll CSV · Daily report. Replaces the prior 3-tile layout.
+
+### 23d. App-wide logger ([`lib/logger.ts`](apps/web/src/lib/logger.ts) + [`ErrorBoundary.tsx`](apps/web/src/components/ErrorBoundary.tsx) + [`/admin/diagnostics`](apps/web/src/routes/admin/Diagnostics.tsx))
+
+Every error path in the app now flows through `logger.error(e, context)`:
+
+- **IndexedDB-backed** — entries persist across reloads, capped at 500 + auto-pruned at 14 days.
+- **Structured context** — every entry has `module`, `action`, plus role-relevant fields (`workerId`, `siteId`, `attendanceId`, `userId`, `status`).
+- **Console echo** with consistent `[LEVEL] module · action message {context}` format for live debugging.
+- **`window` event** dispatched on every entry so future toast UIs can subscribe.
+- **Global handlers** for unhandled `error` + `unhandledrejection` events — nothing escapes capture.
+- **`<ErrorBoundary>`** wraps the entire app in [App.tsx](apps/web/src/App.tsx). Renders a friendly "Something went wrong" page with a Try Again button and forwards the error to the logger.
+- **Admin Diagnostics page** ([/admin/diagnostics](apps/web/src/routes/admin/Diagnostics.tsx)) with level filters (all/error/warn/info), Refresh + Clear buttons, expandable stack traces, structured context display. Live-updates as new entries land via the `app:log` event.
+
+Wired into critical paths so far: `WorkerRegister`, `WorkerPunch`, `ManualPunch`, `EditPunch`, `SupervisorLogin`, `ReportsList`. Remaining routes (Approvals, admin CRUD, etc.) still use plain console — they'll get the same treatment lazily as bugs surface.
+
+Privacy: log entries stay on the device. **Never** sent to a server unless an admin explicitly opts in (post-MVP — would require a `log_uploads` Edge Function gated by `is_admin()`).
+
+### 23e. Status update on the test pyramid
+
+| Layer | Count | Status |
+|---|---|---|
+| `pnpm typecheck` | — | ✅ |
+| `pnpm build` | — | ✅ |
+| `bash scripts/e2e.sh` (API E2E) | 27 | ✅ |
+| `pnpm test:e2e` (Playwright UI) | 14 | ✅ from M11 — re-run pending after M12 changes |
+| `bash scripts/cleanup-tables.sh` | — | ✅ verified preserves supervisors, re-seeds workers |
+
+Smoke results for the new code:
+
+```
+✓ self-registration round-trip (POST /functions/v1/worker-register with newWorker → pending_approval)
+✓ list_active_sites RPC returns the seeded site for anon
+✓ attendance_filtered RPC returns filtered rows with all joins resolved
+✓ logger persists across IndexedDB reloads (manual via DevTools → Application)
+```
+
+### 23f. Field test on a real Android phone (added by user)
+
+The user wired ngrok in [vite.config.ts](apps/web/vite.config.ts) + a `pnpm tunnel` script + an "ngrok scenario C" block in [`apps/web/.env.example`](apps/web/.env.example). Vite proxies `/auth/v1`, `/rest/v1`, `/storage/v1`, `/realtime/v1`, `/functions/v1` to the local Supabase stack so a single ngrok URL serves both the PWA and the API — required for camera + geolocation on Android (HTTPS secure context).
+
+This unlocks proper field testing without deploying. Worth promoting to the runbook once the workflow stabilises.
+
+---
+
 ## 20. Sources (2026 references used in §13–§19)
 
 - [Top 6 Geofencing Time Clock Apps 2026 — Truein](https://truein.com/blogs/best-geofencing-time-clock-apps-for-employees)

@@ -5,7 +5,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 
 interface RegisterBody {
-  workerId: string
+  // Existing-worker flow: pick from the dropdown of pre-invited workers
+  workerId?: string
+  // Self-registration flow: worker isn't in the list yet
+  newWorker?: {
+    fullName: string
+    phone?: string
+    siteId: string
+  }
   pin: string
   selfieDataUrl: string
   gps?: { lat?: number; lng?: number; accuracy_m?: number; speed_ms?: number | null }
@@ -28,17 +35,64 @@ Deno.serve(async (req) => {
     return cors(jsonError('Invalid JSON', 400))
   }
 
-  if (!body.workerId || !body.pin || !body.selfieDataUrl) {
+  if (!body.pin || !body.selfieDataUrl) {
     return cors(jsonError('Missing required fields', 400))
   }
   if (!/^\d{4,6}$/.test(body.pin)) return cors(jsonError('PIN must be 4-6 digits', 400))
+  if (!body.workerId && !body.newWorker) {
+    return cors(jsonError('Must provide either workerId or newWorker', 400))
+  }
+  if (body.newWorker && (!body.newWorker.fullName?.trim() || !body.newWorker.siteId)) {
+    return cors(jsonError('Self-registration requires fullName + siteId', 400))
+  }
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+
+  let workerId: string | undefined = body.workerId
+  let isSelfRegister = false
+
+  if (!workerId && body.newWorker) {
+    // Self-registration: create a fresh workers row + assignment, then
+    // proceed with the standard registration flow against the new id.
+    isSelfRegister = true
+    const { data: created, error: createErr } = await sb
+      .from('workers')
+      .insert({
+        full_name: body.newWorker.fullName.trim(),
+        phone: body.newWorker.phone?.trim() || null,
+        status: 'invited',
+      })
+      .select('id')
+      .single()
+    if (createErr || !created) {
+      return cors(jsonError(`Failed to create worker: ${createErr?.message ?? 'unknown'}`, 500))
+    }
+    workerId = created.id
+
+    // Verify the chosen site exists and is active before assigning
+    const { data: site } = await sb
+      .from('sites')
+      .select('id, status')
+      .eq('id', body.newWorker.siteId)
+      .maybeSingle()
+    if (!site || site.status !== 'active') {
+      return cors(jsonError('Chosen site is not active', 400))
+    }
+
+    const { error: wsaErr } = await sb.from('worker_site_assignments').insert({
+      worker_id: workerId,
+      site_id: body.newWorker.siteId,
+      is_primary: true,
+    })
+    if (wsaErr) {
+      return cors(jsonError(`Failed to assign site: ${wsaErr.message}`, 500))
+    }
+  }
 
   const { data: worker, error: workerErr } = await sb
     .from('workers')
     .select('id, status, auth_user_id')
-    .eq('id', body.workerId)
+    .eq('id', workerId!)
     .maybeSingle()
 
   if (workerErr || !worker) return cors(jsonError('Worker not found', 404))
@@ -46,8 +100,8 @@ Deno.serve(async (req) => {
     return cors(jsonError(`Worker is ${worker.status}; cannot register`, 409))
 
   const ipAddress = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? null
-  const email = `${body.workerId}@worker.local`
-  const password = `${body.pin}-${body.workerId.slice(0, 8)}`
+  const email = `${workerId}@worker.local`
+  const password = `${body.pin}-${workerId!.slice(0, 8)}`
 
   let authUserId = worker.auth_user_id as string | null
   if (!authUserId) {
@@ -55,7 +109,7 @@ Deno.serve(async (req) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { worker_id: body.workerId, kind: 'worker' },
+      user_metadata: { worker_id: workerId, kind: 'worker' },
     })
     if (createErr) return cors(jsonError(`Auth create failed: ${createErr.message}`, 500))
     authUserId = created.user.id
@@ -64,7 +118,7 @@ Deno.serve(async (req) => {
     if (updateErr) return cors(jsonError(`Auth update failed: ${updateErr.message}`, 500))
   }
 
-  const path = `${body.workerId}/baseline-${Date.now()}.jpg`
+  const path = `${workerId}/baseline-${Date.now()}.jpg`
   const blob = dataUrlToBlob(body.selfieDataUrl)
   const { error: uploadErr } = await sb.storage
     .from('selfies')
@@ -79,11 +133,11 @@ Deno.serve(async (req) => {
       status: 'pending_approval',
       registered_at: new Date().toISOString(),
     })
-    .eq('id', body.workerId)
+    .eq('id', workerId)
   if (updateErr) return cors(jsonError(`Worker update failed: ${updateErr.message}`, 500))
 
   await sb.from('device_logs').insert({
-    worker_id: body.workerId,
+    worker_id: workerId,
     event: 'register',
     device_fingerprint: body.deviceFingerprint,
     user_agent: body.userAgent,
@@ -94,7 +148,12 @@ Deno.serve(async (req) => {
 
   return cors(
     new Response(
-      JSON.stringify({ status: 'pending_approval', authEmail: email }),
+      JSON.stringify({
+        status: 'pending_approval',
+        authEmail: email,
+        workerId,
+        selfRegistered: isSelfRegister,
+      }),
       { headers: { 'content-type': 'application/json' }, status: 200 },
     ),
   )

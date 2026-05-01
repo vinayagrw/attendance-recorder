@@ -98,16 +98,21 @@ export default function SupervisorDashboard() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <Link to="/supervisor/approvals"
           className="rounded-xl bg-blue-50 p-3 text-center text-xs text-blue-900 hover:bg-blue-100">
           Approvals
           <div className="text-lg font-bold">{pendingCount ?? 0}</div>
         </Link>
+        <Link to="/supervisor/reports-list"
+          className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-800 hover:bg-slate-200">
+          Reports (filter)
+          <div className="text-lg font-bold">📋</div>
+        </Link>
         <Link to="/supervisor/reports"
           className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-800 hover:bg-slate-200">
-          Reports
-          <div className="text-lg font-bold">CSV</div>
+          Payroll CSV
+          <div className="text-lg font-bold">⬇</div>
         </Link>
         <Link to="/supervisor/daily-report"
           className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-800 hover:bg-slate-200">

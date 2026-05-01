@@ -6,6 +6,7 @@ import { z } from 'zod'
 import RoleScaffold from '../_RoleScaffold'
 import { signInWithPassword } from '@/lib/auth'
 import { useSession } from '@/hooks/useSession'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -36,7 +37,15 @@ export default function SupervisorLogin() {
   const onSubmit = async (values: FormValues) => {
     setServerError(null)
     const result = await signInWithPassword(values.email, values.password)
-    if (!result.ok) setServerError(result.error)
+    if (!result.ok) {
+      logger.warn(`supervisor login failed: ${result.error}`, {
+        module: 'SupervisorLogin',
+        email: values.email,
+      })
+      setServerError(result.error)
+    } else {
+      logger.info('supervisor login ok', { module: 'SupervisorLogin', email: values.email })
+    }
     // session change will trigger the useEffect above
   }
 

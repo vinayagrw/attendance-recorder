@@ -5,6 +5,7 @@ import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import { useSupervisor } from '@/hooks/useSupervisor'
 import SelfieThumb from '@/components/SelfieThumb'
+import { logger } from '@/lib/logger'
 
 function localFromIso(iso: string): string {
   const d = new Date(iso)
@@ -87,9 +88,24 @@ export default function SupervisorEditPunch() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance-today'] })
       qc.invalidateQueries({ queryKey: ['edit-punch'] })
+      logger.info('punch edited', {
+        module: 'EditPunch',
+        attendanceId: id,
+        status,
+        userId: supervisor?.id,
+      })
       setInfo('Punch updated.')
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => {
+      logger.error(e, {
+        module: 'EditPunch',
+        action: 'update',
+        attendanceId: id,
+        status,
+        userId: supervisor?.id,
+      })
+      setError((e as Error).message)
+    },
   })
 
   const remove = useMutation({

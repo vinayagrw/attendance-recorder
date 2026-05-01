@@ -7,6 +7,7 @@
     "dev": "concurrently --names \"vite,fns\" --prefix-colors \"cyan,magenta\" --kill-others-on-fail \"pnpm --filter @attendance/web dev\" \"npx supabase functions serve --no-verify-jwt\"",
     "dev:vite": "pnpm --filter @attendance/web dev",
     "dev:functions": "npx supabase functions serve --no-verify-jwt",
+    "tunnel": "ngrok http 5173",
     "build": "pnpm --filter @attendance/web build",
     "preview": "pnpm --filter @attendance/web preview",
     "typecheck": "pnpm --filter @attendance/web typecheck",

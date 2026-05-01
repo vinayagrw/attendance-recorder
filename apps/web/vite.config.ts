@@ -52,5 +52,13 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    allowedHosts: ['.ngrok-free.app', '.ngrok.app'],
+    proxy: {
+      '/auth/v1':      { target: 'http://127.0.0.1:54321', changeOrigin: true },
+      '/rest/v1':      { target: 'http://127.0.0.1:54321', changeOrigin: true },
+      '/storage/v1':   { target: 'http://127.0.0.1:54321', changeOrigin: true },
+      '/functions/v1': { target: 'http://127.0.0.1:54321', changeOrigin: true },
+      '/realtime/v1':  { target: 'http://127.0.0.1:54321', changeOrigin: true, ws: true },
+    },
   },
 })

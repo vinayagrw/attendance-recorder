@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import { useSupervisor } from '@/hooks/useSupervisor'
+import { logger } from '@/lib/logger'
 
 function nowLocalIsoMinutes(): string {
   const d = new Date()
@@ -75,10 +76,27 @@ export default function SupervisorManualPunch() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance-today'] })
+      logger.info('manual punch added', {
+        module: 'ManualPunch',
+        workerId,
+        siteId,
+        type,
+        userId: supervisor?.id,
+      })
       setInfo(`Manual ${type.toUpperCase()} punch added.`)
       setComment('')
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => {
+      logger.error(e, {
+        module: 'ManualPunch',
+        action: 'insert',
+        workerId,
+        siteId,
+        type,
+        userId: supervisor?.id,
+      })
+      setError((e as Error).message)
+    },
   })
 
   return (

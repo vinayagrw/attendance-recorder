@@ -9,6 +9,7 @@ import { startSelfieStream, stopStream, captureSelfie } from '@/lib/camera'
 import { getCurrentLocation, metersBetween, type PunchLocation } from '@/lib/geolocation'
 import { getDeviceInfo } from '@/lib/deviceFingerprint'
 import { drainQueue, enqueuePunch, queueLength } from '@/lib/offlineQueue'
+import { logger } from '@/lib/logger'
 
 interface PunchPayload {
   siteId: string
@@ -93,7 +94,10 @@ export default function WorkerPunch() {
           if (cancelled) stopStream(s)
           else streamRef.current = s
         })
-        .catch((e: Error) => setError(`Camera: ${e.message}`))
+        .catch((e: Error) => {
+          logger.error(e, { module: 'WorkerPunch', action: 'startSelfieStream', workerId: worker?.id })
+          setError(`Camera: ${e.message}`)
+        })
     }
     return () => {
       cancelled = true
@@ -190,18 +194,40 @@ export default function WorkerPunch() {
       try {
         const { ok, json } = await postPunch(payload)
         if (!ok) throw new Error(json.error ?? `Punch failed`)
+        logger.info('punch submitted', {
+          module: 'WorkerPunch',
+          action: 'submit',
+          workerId: worker.id,
+          siteId,
+          attendanceId: json.id,
+          type: nextType,
+          status: json.status,
+        })
         setInfo(
           `Punched ${nextType.toUpperCase()} · status: ${json.status}` +
             (json.flag_reasons?.length ? ` (${json.flag_reasons.join(', ')})` : ''),
         )
         qc.invalidateQueries({ queryKey: ['my-attendance-today'] })
       } catch (e) {
-        // Network / server failure → queue for later
+        logger.warn('punch failed — enqueuing offline', {
+          module: 'WorkerPunch',
+          action: 'enqueue',
+          workerId: worker.id,
+          siteId,
+          reason: (e as Error).message,
+        })
         await enqueuePunch(payload)
         setQueued(await queueLength())
         setInfo(`Network unavailable — punch queued. Will sync when online. (${(e as Error).message})`)
       }
     } catch (e) {
+      logger.error(e, {
+        module: 'WorkerPunch',
+        action: 'submit',
+        workerId: worker?.id,
+        siteId,
+        type: nextType,
+      })
       setError((e as Error).message)
     } finally {
       setSubmitting(null)

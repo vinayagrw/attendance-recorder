@@ -9,15 +9,18 @@ import SupervisorLogin from './routes/supervisor/Login'
 import SupervisorDashboard from './routes/supervisor/Dashboard'
 import SupervisorApprovals from './routes/supervisor/Approvals'
 import SupervisorReports from './routes/supervisor/Reports'
+import SupervisorReportsList from './routes/supervisor/ReportsList'
 import SupervisorDailyReport from './routes/supervisor/DailyReport'
 import SupervisorInviteWorker from './routes/supervisor/InviteWorker'
 import SupervisorManualPunch from './routes/supervisor/ManualPunch'
 import SupervisorEditPunch from './routes/supervisor/EditPunch'
 import InstallPrompt from './components/InstallPrompt'
+import ErrorBoundary from './components/ErrorBoundary'
 import AdminProjects from './routes/admin/Projects'
 import AdminSites from './routes/admin/Sites'
 import AdminWorkers from './routes/admin/Workers'
 import AdminAudit from './routes/admin/Audit'
+import AdminDiagnostics from './routes/admin/Diagnostics'
 import NotFound from './routes/NotFound'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -26,7 +29,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<HomeRouter />} />
 
-      {/* Worker (no Supabase Auth — custom JWT via Edge Function in M2) */}
+      {/* Worker (synthetic email Supabase Auth — see plan §22) */}
       <Route path="/worker">
         <Route index element={<Navigate to="/worker/login" replace />} />
         <Route path="login" element={<WorkerLogin />} />
@@ -44,6 +47,7 @@ export default function App() {
           <Route path="dashboard" element={<SupervisorDashboard />} />
           <Route path="approvals" element={<SupervisorApprovals />} />
           <Route path="reports" element={<SupervisorReports />} />
+          <Route path="reports-list" element={<SupervisorReportsList />} />
           <Route path="daily-report" element={<SupervisorDailyReport />} />
           <Route path="invite-worker" element={<SupervisorInviteWorker />} />
           <Route path="manual-punch" element={<SupervisorManualPunch />} />
@@ -58,6 +62,7 @@ export default function App() {
         <Route path="sites" element={<AdminSites />} />
         <Route path="workers" element={<AdminWorkers />} />
         <Route path="audit" element={<AdminAudit />} />
+        <Route path="diagnostics" element={<AdminDiagnostics />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -67,9 +72,9 @@ export default function App() {
 
 export function AppWithChrome() {
   return (
-    <>
+    <ErrorBoundary>
       <App />
       <InstallPrompt />
-    </>
+    </ErrorBoundary>
   )
 }
