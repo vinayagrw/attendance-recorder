@@ -19,7 +19,9 @@ export interface WorkerSite {
   timezone: string
   daily_note: string | null
   project_id: string
+  project_name?: string
   is_primary: boolean
+  is_assigned?: boolean
 }
 
 export function useWorker() {
@@ -41,13 +43,15 @@ export function useWorker() {
   })
 
   const sitesQuery = useQuery({
-    queryKey: ['my-worker-sites', workerQuery.data?.id],
+    queryKey: ['my-assignable-sites', workerQuery.data?.id],
     enabled: !!workerQuery.data?.id,
     queryFn: async (): Promise<WorkerSite[]> => {
-      const { data, error } = await supabase
-        .from('worker_my_sites')
-        .select('site_id, name, default_lat, default_lng, default_radius_m, timezone, daily_note, project_id, is_primary')
-        .eq('worker_id', workerQuery.data!.id)
+      // M13: returns ALL active sites with is_assigned flag, so workers can
+      // punch at unassigned sites (will be flagged as `site_not_assigned`
+      // server-side for supervisor review).
+      const { data, error } = await supabase.rpc('list_assignable_sites', {
+        p_worker_id: workerQuery.data!.id,
+      })
       if (error) throw error
       return (data as WorkerSite[]) ?? []
     },

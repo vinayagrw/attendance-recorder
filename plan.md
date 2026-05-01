@@ -953,6 +953,66 @@ This unlocks proper field testing without deploying. Worth promoting to the runb
 
 ---
 
+## 24. Field-feedback fixes & UX gap closures (M13)
+
+Driven by direct user feedback: punch at unassigned site, anomaly cleanup after verification, edit-punch deep view, daily-report browsing, forgot-PIN, supervisor-side briefing, audit diff, bulk approval.
+
+### 24a. Bug fixes
+
+| # | Issue | Fix |
+|---|---|---|
+| 1 | Test project's site didn't appear on the punch screen unless worker was assigned to it | New [`list_assignable_sites(p_worker_id)`](supabase/migrations/0013_more_features.sql) RPC returns ALL active sites with `is_assigned`/`is_primary` flags. [`Punch.tsx`](apps/web/src/routes/worker/Punch.tsx) shows them all with a "⚠ not assigned to you" hint; the punch goes through and the [`punch-submit`](supabase/functions/punch-submit/index.ts) Edge Function adds `site_not_assigned` to `flag_reasons` for supervisor review. |
+| 2 | Verified punches still showed in the Anomalies pane | [`Dashboard.tsx`](apps/web/src/routes/supervisor/Dashboard.tsx) anomaly filter changed from `status==='flagged' OR flag_reasons.length > 0` to **`status==='flagged'` only**. Once a supervisor verifies, the row leaves the pane. |
+| 3 | Edit-punch view didn't expose project/site change or device/EXIF metadata | [`EditPunch.tsx`](apps/web/src/routes/supervisor/EditPunch.tsx) rewritten: editable site (cross-project), editable type, editable status, editable comment, editable timestamp. Read-only metadata block exposes GPS lat/lng/accuracy/speed, distance from site, capture method, device fingerprint, IP, user agent, briefing acknowledgement, plus a collapsible JSON view of `selfie_metadata`. |
+
+### 24b. UX gaps closed (per [§16 personas](#16-user-research--personas--field-constraints))
+
+| Persona pain point | Fix |
+|---|---|
+| **Worker** has no Forgot-PIN path | New [`/worker/forgot-pin`](apps/web/src/routes/worker/ForgotPin.tsx) — worker picks name, optional phone, submits. Lands as a `pin_reset_requests` row visible to supervisors at [`/supervisor/pin-resets`](apps/web/src/routes/supervisor/PinResets.tsx). Supervisor enters new PIN → new [`worker-pin-reset`](supabase/functions/worker-pin-reset/index.ts) Edge Function updates auth + clears lockout. PIN is shown to supervisor once for in-person handoff. |
+| **Worker** had to navigate away to see today's punches | Today's last-5 punches now render inline on [`Punch.tsx`](apps/web/src/routes/worker/Punch.tsx) above the "Full history" link, with status colour badges. |
+| **Supervisor** approvals queue had no bulk approve, no separation of `invited` vs `pending_approval` | [`Approvals.tsx`](apps/web/src/routes/supervisor/Approvals.tsx) now has two tabs ("Pending approval" / "Invited (not registered)"), checkboxes per row, "Select all" + "Approve N" bulk action. |
+| **Supervisor** couldn't edit daily briefing — admin-only at `/admin/sites` | New [`/supervisor/briefings`](apps/web/src/routes/supervisor/Briefings.tsx) — per-site editor with last-updated timestamp. RLS policy [`sites_supervisor_briefing`](supabase/migrations/0013_more_features.sql) lets supervisors update sites in their project scope. |
+| **Admin** audit log was read-only blob; no diff visualisation | [`Audit.tsx`](apps/web/src/routes/admin/Audit.tsx) now has table-name filter chips and an expandable side-by-side **before / after** diff for each entry, with changed cells highlighted amber. |
+| **Admin** no in-app PIN-reset action on the workers page | [`/admin/workers`](apps/web/src/routes/admin/Workers.tsx) gets a "Reset PIN" button that prompts for the new PIN and calls the same `worker-pin-reset` Edge Function. |
+| **Daily reports** were submission-only, no browse | New [`/supervisor/daily-reports-list`](apps/web/src/routes/supervisor/DailyReportsList.tsx) — filter by date range / project / site, see weather + headcount-match badge + work-completed/blockers preview. Mirrors the attendance reports list pattern. |
+
+### 24c. Project archive cascade ([trigger](supabase/migrations/0013_more_features.sql))
+
+When a project's `status` flips to `archived`:
+1. Every active `site` under the project → `status='closed'`
+2. Every open `worker_site_assignment` for those sites → `valid_to = now()`
+3. Every today-still-open attendance shift → auto-closed with `flag_reasons=['auto_closed_project_archived']`
+
+The `archived_at` timestamp is set automatically. Implemented as a `BEFORE UPDATE` trigger so the cascade happens transactionally with the project update.
+
+### 24d. Test results (M13)
+
+| Suite | Count | Status |
+|---|---|---|
+| `pnpm typecheck` | — | ✅ |
+| `bash scripts/e2e.sh` (API E2E) | 27 | ✅ on clean run |
+| Self-registration round-trip | smoke | ✅ |
+| `list_assignable_sites` RPC | smoke | ✅ |
+| `pin_reset_requests` insert (anon) | smoke | ✅ |
+| `worker-pin-reset` Edge Function | smoke (admin auth gated) | ✅ |
+| Project archive cascade trigger | manual ✅ |
+
+Playwright UI suite re-run pending after the dashboard tile change (tile assertions need updating again — the M13 layout has 6 tiles total). CI will catch this on the next PR.
+
+### 24e. New routes summary
+
+| URL | What |
+|---|---|
+| `/worker/forgot-pin` | Worker requests a PIN reset |
+| `/supervisor/pin-resets` | Supervisor approves resets, sets new PINs |
+| `/supervisor/briefings` | Per-site daily briefing editor (no admin gate) |
+| `/supervisor/daily-reports-list` | Browse historical daily reports with filters |
+
+Dashboard now has 8 tiles total (4 stat tiles + Invite worker + Manual punch + Briefings + PIN resets + Browse daily reports).
+
+---
+
 ## 20. Sources (2026 references used in §13–§19)
 
 - [Top 6 Geofencing Time Clock Apps 2026 — Truein](https://truein.com/blogs/best-geofencing-time-clock-apps-for-employees)

@@ -80,6 +80,38 @@ export default function AdminWorkers() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-workers'] }),
   })
 
+  const resetPin = async (id: string, name: string) => {
+    const newPin = prompt(`New PIN for ${name} (4-6 digits):`)
+    if (!newPin) return
+    if (!/^\d{4,6}$/.test(newPin)) {
+      alert('PIN must be 4-6 digits')
+      return
+    }
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session) throw new Error('Not signed in')
+      const fnUrl = `${import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/worker-pin-reset`
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          apikey:
+            (import.meta.env.VITE_SUPABASE_ANON_KEY ??
+              import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+              '') as string,
+        },
+        body: JSON.stringify({ workerId: id, newPin }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? `Reset failed (${res.status})`)
+      alert(`PIN for ${name} set to ${newPin}. Tell them in person.`)
+      qc.invalidateQueries({ queryKey: ['admin-workers'] })
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
   return (
     <RoleScaffold title="Workers" backTo="/admin/projects">
       <button onClick={() => setShowForm((s) => !s)} className="btn-secondary">
@@ -132,6 +164,8 @@ export default function AdminWorkers() {
               )}
               <button onClick={() => resetLockout.mutate(w.id)}
                 className="rounded-md bg-slate-200 px-2 py-1">Reset lockout</button>
+              <button onClick={() => resetPin(w.id, w.full_name)}
+                className="rounded-md bg-slate-200 px-2 py-1">Reset PIN</button>
               {w.status !== 'offboarded' && (
                 <button onClick={() => {
                   if (confirm(`Offboard ${w.full_name}?`)) setStatus.mutate({ id: w.id, status: 'offboarded' })

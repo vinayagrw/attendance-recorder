@@ -99,6 +99,10 @@ export default function WorkerLogin() {
         <Link to="/worker/register" className="btn-secondary text-center">
           First time? Register
         </Link>
+
+        <Link to="/worker/forgot-pin" className="text-center text-sm text-slate-500 underline">
+          Forgot PIN?
+        </Link>
       </form>
     </RoleScaffold>
   )

@@ -104,6 +104,14 @@ Deno.serve(async (req) => {
     flags.push('geofence_far')
   }
 
+  // M13: flag if the worker isn't assigned to this site (they punched at a
+  // site they shouldn't be at — supervisor can investigate or accept).
+  const { data: isAssigned } = await sb.rpc('is_worker_assigned', {
+    p_worker_id: worker.id,
+    p_site_id: body.siteId,
+  })
+  if (!isAssigned) flags.push('site_not_assigned')
+
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? null
 
   const path = `${worker.id}/${body.type}-${Date.now()}.jpg`

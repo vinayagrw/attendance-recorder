@@ -280,14 +280,28 @@ export default function WorkerPunch() {
         </div>
       )}
 
-      <select className="input-field" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-        {sites.map((s) => (
-          <option key={s.site_id} value={s.site_id}>
-            {s.name}
-            {s.is_primary ? ' (primary)' : ''}
-          </option>
-        ))}
-      </select>
+      <div>
+        <select
+          className="input-field"
+          value={siteId}
+          onChange={(e) => setSiteId(e.target.value)}
+        >
+          {sites.map((s) => (
+            <option key={s.site_id} value={s.site_id}>
+              {s.is_assigned === false ? '⚠ ' : ''}
+              {s.name}
+              {s.is_primary ? ' ★' : ''}
+              {s.is_assigned === false ? ' (not assigned to you)' : ''}
+            </option>
+          ))}
+        </select>
+        {site && site.is_assigned === false && (
+          <p className="mt-1 text-xs text-amber-700">
+            ⚠ You aren't assigned to this site. Your punch will go through but will be flagged
+            for supervisor review.
+          </p>
+        )}
+      </div>
 
       <div className="relative overflow-hidden rounded-xl bg-black">
         <video ref={videoRef} className="w-full" playsInline muted />
@@ -344,8 +358,40 @@ export default function WorkerPunch() {
           : `Punch ${nextType.toUpperCase()}`}
       </button>
 
+      {/* Today's history peek — last 5 punches inline */}
+      {today && today.length > 0 && (
+        <div className="rounded-xl bg-white p-3 shadow-sm">
+          <div className="mb-2 text-xs font-semibold text-slate-500">Today's punches</div>
+          <ul className="flex flex-col gap-1.5">
+            {today.slice(0, 5).map((row) => {
+              const dt = new Date(row.punched_at)
+              return (
+                <li key={row.id} className="flex items-center justify-between text-xs">
+                  <span className="font-mono">
+                    {row.type.toUpperCase()} · {dt.toLocaleTimeString()}
+                  </span>
+                  <span
+                    className={
+                      row.status === 'verified'
+                        ? 'rounded-full bg-green-100 px-2 py-0.5 text-green-700'
+                        : row.status === 'flagged'
+                        ? 'rounded-full bg-amber-100 px-2 py-0.5 text-amber-800'
+                        : row.status === 'rejected'
+                        ? 'rounded-full bg-red-100 px-2 py-0.5 text-red-700'
+                        : 'rounded-full bg-slate-100 px-2 py-0.5 text-slate-700'
+                    }
+                  >
+                    {row.status}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       <button type="button" className="btn-secondary" onClick={() => navigate('/worker/history')}>
-        My history
+        Full history
       </button>
 
       <button

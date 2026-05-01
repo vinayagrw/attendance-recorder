@@ -11,9 +11,13 @@ import SupervisorApprovals from './routes/supervisor/Approvals'
 import SupervisorReports from './routes/supervisor/Reports'
 import SupervisorReportsList from './routes/supervisor/ReportsList'
 import SupervisorDailyReport from './routes/supervisor/DailyReport'
+import SupervisorDailyReportsList from './routes/supervisor/DailyReportsList'
 import SupervisorInviteWorker from './routes/supervisor/InviteWorker'
 import SupervisorManualPunch from './routes/supervisor/ManualPunch'
 import SupervisorEditPunch from './routes/supervisor/EditPunch'
+import SupervisorPinResets from './routes/supervisor/PinResets'
+import SupervisorBriefings from './routes/supervisor/Briefings'
+import WorkerForgotPin from './routes/worker/ForgotPin'
 import InstallPrompt from './components/InstallPrompt'
 import ErrorBoundary from './components/ErrorBoundary'
 import AdminProjects from './routes/admin/Projects'
@@ -34,6 +38,7 @@ export default function App() {
         <Route index element={<Navigate to="/worker/login" replace />} />
         <Route path="login" element={<WorkerLogin />} />
         <Route path="register" element={<WorkerRegister />} />
+        <Route path="forgot-pin" element={<WorkerForgotPin />} />
         <Route path="pending" element={<WorkerPending />} />
         <Route path="punch" element={<WorkerPunch />} />
         <Route path="history" element={<WorkerHistory />} />
@@ -49,9 +54,12 @@ export default function App() {
           <Route path="reports" element={<SupervisorReports />} />
           <Route path="reports-list" element={<SupervisorReportsList />} />
           <Route path="daily-report" element={<SupervisorDailyReport />} />
+          <Route path="daily-reports-list" element={<SupervisorDailyReportsList />} />
           <Route path="invite-worker" element={<SupervisorInviteWorker />} />
           <Route path="manual-punch" element={<SupervisorManualPunch />} />
           <Route path="edit-punch/:id" element={<SupervisorEditPunch />} />
+          <Route path="pin-resets" element={<SupervisorPinResets />} />
+          <Route path="briefings" element={<SupervisorBriefings />} />
         </Route>
       </Route>
 

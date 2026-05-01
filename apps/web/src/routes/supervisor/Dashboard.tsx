@@ -71,8 +71,10 @@ export default function SupervisorDashboard() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance-today'] }),
   })
 
-  const flagged = (today ?? []).filter((r) => r.status === 'flagged' || r.flag_reasons?.length > 0)
-  const clean = (today ?? []).filter((r) => !flagged.includes(r))
+  // M13 fix: only currently-flagged punches (status = 'flagged') stay in
+  // anomalies. Once a supervisor verifies / rejects, they leave this pane.
+  const flagged = (today ?? []).filter((r) => r.status === 'flagged')
+  const clean = (today ?? []).filter((r) => r.status !== 'flagged')
   const sortedFlagged = [...flagged].sort((a, b) => sevOf(b.flag_reasons) - sevOf(a.flag_reasons))
 
   const toggle = (id: string) => {
@@ -129,6 +131,18 @@ export default function SupervisorDashboard() {
         <Link to="/supervisor/manual-punch"
           className="rounded-xl bg-emerald-50 p-3 text-center text-sm text-emerald-900 hover:bg-emerald-100">
           + Manual punch
+        </Link>
+        <Link to="/supervisor/briefings"
+          className="rounded-xl bg-amber-50 p-3 text-center text-sm text-amber-900 hover:bg-amber-100">
+          ✏ Briefings
+        </Link>
+        <Link to="/supervisor/pin-resets"
+          className="rounded-xl bg-amber-50 p-3 text-center text-sm text-amber-900 hover:bg-amber-100">
+          🔑 PIN resets
+        </Link>
+        <Link to="/supervisor/daily-reports-list"
+          className="col-span-2 rounded-xl bg-slate-100 p-3 text-center text-sm text-slate-800 hover:bg-slate-200">
+          📋 Browse daily reports
         </Link>
       </div>
 
