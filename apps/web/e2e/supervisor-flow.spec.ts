@@ -16,12 +16,12 @@ test('supervisor logs in and lands on the dashboard', async ({ page }) => {
   await page.getByLabel('Email').fill(SUPERVISOR_EMAIL)
   const pwd = page.getByLabel('Password')
   await pwd.fill(SUPERVISOR_PASS)
-  // Submit via Enter to dodge any "button stability" issues with btn-primary
-  // transitions while react-hook-form's isSubmitting toggles.
   await pwd.press('Enter')
 
   await expect(page).toHaveURL(/\/supervisor\/dashboard$/, { timeout: 15_000 })
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+  // Drain the realtime channel before context teardown
+  await page.goto('about:blank').catch(() => undefined)
   await expect(page.getByText('Vinay (admin)')).toBeVisible()
   // 6 dashboard tiles (3 stat tiles + 2 action tiles + the row's edit/verify)
   await expect(page.getByRole('link', { name: /Approvals/ })).toBeVisible()
@@ -34,6 +34,13 @@ test('supervisor logs in and lands on the dashboard', async ({ page }) => {
 test.describe('authenticated supervisor flows', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsSupervisor(page)
+  })
+
+  // Drop any open realtime websockets before context teardown — the live
+  // attendance feed otherwise holds the connection long enough to occasionally
+  // exceed the test timeout during cleanup.
+  test.afterEach(async ({ page }) => {
+    await page.goto('about:blank').catch(() => undefined)
   })
 
   test('supervisor invite-worker form renders and validates', async ({ page }) => {

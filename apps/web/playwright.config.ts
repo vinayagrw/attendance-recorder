@@ -5,7 +5,11 @@ const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  // 60 s per test (was 30 s). The dev server keeps a realtime websocket open
+  // for live attendance, and context teardown occasionally takes 30+ seconds
+  // to close those connections cleanly. Production builds (vite preview)
+  // teardown faster; we still need this slack against `pnpm dev`.
+  timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,
