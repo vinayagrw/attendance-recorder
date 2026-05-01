@@ -116,6 +116,17 @@ export default function SupervisorDashboard() {
         </Link>
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <Link to="/supervisor/invite-worker"
+          className="rounded-xl bg-emerald-50 p-3 text-center text-sm text-emerald-900 hover:bg-emerald-100">
+          + Invite worker
+        </Link>
+        <Link to="/supervisor/manual-punch"
+          className="rounded-xl bg-emerald-50 p-3 text-center text-sm text-emerald-900 hover:bg-emerald-100">
+          + Manual punch
+        </Link>
+      </div>
+
       <section>
         <h2 className="mb-2 text-lg font-bold text-slate-900">
           Anomalies <span className="text-slate-400">({sortedFlagged.length})</span>
@@ -206,24 +217,33 @@ function Row({
           </div>
         )}
       </div>
-      {row.status !== 'verified' && row.status !== 'rejected' && (
-        <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1">
+        {row.status !== 'verified' && row.status !== 'rejected' && (
           <button
             onClick={onVerify}
             className="rounded-md bg-green-600 px-2 py-1 text-xs text-white"
+            aria-label="Verify"
           >
             ✓
           </button>
-          {!compact && onReject && (
-            <button
-              onClick={onReject}
-              className="rounded-md bg-red-600 px-2 py-1 text-xs text-white"
-            >
-              ✗
-            </button>
-          )}
-        </div>
-      )}
+        )}
+        {!compact && onReject && row.status !== 'rejected' && (
+          <button
+            onClick={onReject}
+            className="rounded-md bg-red-600 px-2 py-1 text-xs text-white"
+            aria-label="Reject"
+          >
+            ✗
+          </button>
+        )}
+        <Link
+          to={`/supervisor/edit-punch/${row.id}`}
+          className="rounded-md bg-slate-200 px-2 py-1 text-center text-xs text-slate-700"
+          aria-label="Edit punch"
+        >
+          Edit
+        </Link>
+      </div>
     </li>
   )
 }

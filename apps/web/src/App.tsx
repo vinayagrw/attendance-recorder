@@ -10,6 +10,9 @@ import SupervisorDashboard from './routes/supervisor/Dashboard'
 import SupervisorApprovals from './routes/supervisor/Approvals'
 import SupervisorReports from './routes/supervisor/Reports'
 import SupervisorDailyReport from './routes/supervisor/DailyReport'
+import SupervisorInviteWorker from './routes/supervisor/InviteWorker'
+import SupervisorManualPunch from './routes/supervisor/ManualPunch'
+import SupervisorEditPunch from './routes/supervisor/EditPunch'
 import InstallPrompt from './components/InstallPrompt'
 import AdminProjects from './routes/admin/Projects'
 import AdminSites from './routes/admin/Sites'
@@ -42,6 +45,9 @@ export default function App() {
           <Route path="approvals" element={<SupervisorApprovals />} />
           <Route path="reports" element={<SupervisorReports />} />
           <Route path="daily-report" element={<SupervisorDailyReport />} />
+          <Route path="invite-worker" element={<SupervisorInviteWorker />} />
+          <Route path="manual-punch" element={<SupervisorManualPunch />} />
+          <Route path="edit-punch/:id" element={<SupervisorEditPunch />} />
         </Route>
       </Route>
 

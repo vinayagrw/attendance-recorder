@@ -792,6 +792,81 @@ Updated since [§18](#18-revised-mvp-scope-delta). ✅ = shipped + verified · �
 
 ---
 
+## 22. Supervisor Self-Service & UI Testing (M10)
+
+User-facing scope expansion + the introduction of real browser-driven tests.
+
+### 22a. Why this exists
+
+Supervisors at small-to-mid construction operators routinely play three roles in one: site engineer, HR admin, and timekeeper. The original RLS gave them visibility but blocked write paths that they actually need every day:
+
+- **Inviting a new worker** without waiting for an admin (high-churn casual labour markets routinely add workers mid-shift).
+- **Entering a manual punch** when a worker forgot, the app crashed, or someone signed in on paper.
+- **Editing an existing punch** to adjust time/status before payroll export — without going through SQL.
+
+Architectural fit: rather than build a parallel admin app for supervisors, extend the existing supervisor scope via RLS + add the UI as routes under `/supervisor/*`. Reuse the existing `useSupervisor()` auth hook + ProtectedRoute. Any data mutation flows through the `trg_audit_changes` triggers shipped in M9, so every supervisor action is captured automatically.
+
+### 22b. Schema + RLS additions ([0011_supervisor_actions.sql](supabase/migrations/0011_supervisor_actions.sql))
+
+| Object | What it does |
+|---|---|
+| `workers_supervisor_invite` policy | Any supervisor can `INSERT` into `workers`. Scope is enforced on the *assignment* INSERT below (worker rows have no project linkage at creation time). |
+| `wsa_supervisor_write` policy | Supervisors can `INSERT/UPDATE/DELETE` `worker_site_assignments` only when the target site's project is in their `scope_project_ids`. |
+| `attendance_supervisor_insert` policy | Supervisors can manually insert attendance rows for sites in their scope. The existing `attendance_supervisor_update` already covers edits. |
+| `supervisor_workers` view | Convenience read view aggregating site assignments per worker; granted to authenticated. |
+
+### 22c. New supervisor routes
+
+| Route | File | What it does |
+|---|---|---|
+| `/supervisor/invite-worker` | [InviteWorker.tsx](apps/web/src/routes/supervisor/InviteWorker.tsx) | Form: full name, phone, site assignment. Inserts `workers` + `worker_site_assignments` in two transactions. Returns the worker URL for sharing. |
+| `/supervisor/manual-punch` | [ManualPunch.tsx](apps/web/src/routes/supervisor/ManualPunch.tsx) | Form: worker / site / IN-OUT toggle / datetime / reason note. Inserts `attendance` with `status='verified'`, `flag_reasons=['manual_entry']`, `reviewer_comment` mandatory for traceability. |
+| `/supervisor/edit-punch/:id` | [EditPunch.tsx](apps/web/src/routes/supervisor/EditPunch.tsx) | Inline edit of `punched_at`, `status`, `reviewer_comment` for any existing punch. Reject button sets `status='rejected'`. Selfie thumbnail + flag reasons shown for context. |
+
+Dashboard tiles updated in [Dashboard.tsx](apps/web/src/routes/supervisor/Dashboard.tsx): two new emerald CTA tiles ("+ Invite worker" / "+ Manual punch") and an Edit button on every attendance row.
+
+### 22d. UI testing — Playwright with real Chromium
+
+Test infrastructure shipped:
+
+- [playwright.config.ts](apps/web/playwright.config.ts) — single Chromium project, `fullyParallel: false` and `workers: 1` so tests share the local Supabase instance safely.
+- [e2e/fixtures.ts](apps/web/e2e/fixtures.ts) — shared seed constants + `loginAsSupervisor(page)` helper + `reactivateSeedWorkers()` / `deleteAllAttendance()` reset utilities.
+- [e2e/home.spec.ts](apps/web/e2e/home.spec.ts) — 3 tests: home renders, login form renders, 404 renders.
+- [e2e/worker-flow.spec.ts](apps/web/e2e/worker-flow.spec.ts) — 4 tests: pick-list populated from RPC, register screen, pending screen, PIN sanitisation.
+- [e2e/supervisor-flow.spec.ts](apps/web/e2e/supervisor-flow.spec.ts) — 7 tests covering: login + dashboard, invite-worker form validation, end-to-end invite (with anon-context verification on `/worker/login`), manual punch entry, edit-punch flow, admin navigation (projects/sites/workers/audit), sign-out.
+
+Run with:
+```bash
+pnpm test:e2e:install   # one-time, downloads Chromium (~150 MB)
+pnpm dev                # ensure vite is up on http://localhost:5175
+E2E_BASE_URL=http://localhost:5175 pnpm test:e2e
+```
+
+**Result: 14/14 passing in 46s.** API smoke (`scripts/e2e.sh`) still 27/27. Combined coverage hits all 5 personas: anon visitor, worker (pick-list, register, pending, PIN), supervisor (full CRUD on attendance), admin (navigation), and offboarding.
+
+### 22e. Test pyramid status (post-M10)
+
+```
+        / E2E API     \    27 (scripts/e2e.sh, ~12s)         ✅
+       / E2E UI         \   14 (Playwright, ~46s)             ✅
+      / integration       \  0                                ⏳ Vitest + RTL
+     /   unit tests          \ 0                              ⏳ pure libs first
+```
+
+What's still missing (deferred to next pass): unit tests for `metersBetween`, watermark canvas drawing, offlineQueue enqueue/drain; integration tests for `useWorker`/`useSupervisor` hooks via React Testing Library.
+
+### 22f. UX gaps closed by M10
+
+| User-research gap (from §16/§17/§19c) | Status |
+|---|---|
+| Supervisor can't invite workers themselves | ✅ Closed — `/supervisor/invite-worker` |
+| Manual punch correction requires SQL | ✅ Closed — `/supervisor/manual-punch` |
+| Edit existing punch (time/status) requires SQL | ✅ Closed — `/supervisor/edit-punch/:id` |
+| Audit log doesn't capture supervisor edits | ✅ Closed — covered by M9 `trg_audit_changes` triggers |
+| No browser-driven tests for the worker flow | ✅ Closed — Playwright suite |
+
+---
+
 ## 20. Sources (2026 references used in §13–§19)
 
 - [Top 6 Geofencing Time Clock Apps 2026 — Truein](https://truein.com/blogs/best-geofencing-time-clock-apps-for-employees)
