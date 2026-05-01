@@ -13,13 +13,14 @@ import AdminSites from './routes/admin/Sites'
 import AdminWorkers from './routes/admin/Workers'
 import AdminAudit from './routes/admin/Audit'
 import NotFound from './routes/NotFound'
+import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomeRouter />} />
 
-      {/* Worker (no Supabase Auth — custom JWT via Edge Function) */}
+      {/* Worker (no Supabase Auth — custom JWT via Edge Function in M2) */}
       <Route path="/worker">
         <Route index element={<Navigate to="/worker/login" replace />} />
         <Route path="login" element={<WorkerLogin />} />
@@ -29,16 +30,18 @@ export default function App() {
         <Route path="history" element={<WorkerHistory />} />
       </Route>
 
-      {/* Supervisor (Supabase Auth, email + password + TOTP) */}
+      {/* Supervisor — login is public; rest require a logged-in supervisor */}
       <Route path="/supervisor">
         <Route index element={<Navigate to="/supervisor/login" replace />} />
         <Route path="login" element={<SupervisorLogin />} />
-        <Route path="dashboard" element={<SupervisorDashboard />} />
-        <Route path="approvals" element={<SupervisorApprovals />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="dashboard" element={<SupervisorDashboard />} />
+          <Route path="approvals" element={<SupervisorApprovals />} />
+        </Route>
       </Route>
 
-      {/* Admin (Supabase Auth, role=admin) */}
-      <Route path="/admin">
+      {/* Admin — admin-only role gate */}
+      <Route path="/admin" element={<ProtectedRoute requiredRole="admin" />}>
         <Route index element={<Navigate to="/admin/projects" replace />} />
         <Route path="projects" element={<AdminProjects />} />
         <Route path="sites" element={<AdminSites />} />
