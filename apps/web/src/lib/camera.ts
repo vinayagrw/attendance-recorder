@@ -64,7 +64,20 @@ export async function startSelfieStream(
     audio: false,
   })
   video.srcObject = stream
-  await video.play()
+  // play() can reject with AbortError when the component unmounts (or the
+  // user clicks Retry) while the promise is still pending. That's noise,
+  // not a real failure — the cleanup will close the stream cleanly. We
+  // only surface real errors (NotAllowed, NotReadable, etc.).
+  try {
+    await video.play()
+  } catch (e) {
+    const name = (e as Error).name
+    if (name === 'AbortError' || name === 'AbortError ') {
+      // benign — outer caller's cancelled flag will skip the rest
+      return stream
+    }
+    throw e
+  }
   // play() resolves when playback starts, but videoWidth/Height may still be 0
   // for a few frames. Wait for actual data so capture doesn't fail with the
   // cryptic "toBlob failed" error.
@@ -84,7 +97,20 @@ export async function startSelfieStream(
   return stream
 }
 
-export function stopStream(stream: MediaStream | null) {
+/**
+ * Cleanly tear down a selfie stream + the video element it was attached to.
+ * Pausing + nulling srcObject BEFORE stopping tracks avoids the
+ *   "play() request was interrupted by a new load request"
+ * console warning when React StrictMode re-mounts the component.
+ */
+export function stopStream(
+  stream: MediaStream | null,
+  video?: HTMLVideoElement | null,
+) {
+  if (video) {
+    try { video.pause() } catch { /* fine if play() never started */ }
+    video.srcObject = null
+  }
   stream?.getTracks().forEach((t) => t.stop())
 }
 

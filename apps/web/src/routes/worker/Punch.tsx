@@ -96,11 +96,12 @@ export default function WorkerPunch() {
   useEffect(() => {
     let cancelled = false
     setCameraReady(false)
-    if (videoRef.current && !streamRef.current) {
-      startSelfieStream(videoRef.current)
+    const videoEl = videoRef.current
+    if (videoEl && !streamRef.current) {
+      startSelfieStream(videoEl)
         .then((s) => {
           if (cancelled) {
-            stopStream(s)
+            stopStream(s, videoEl)
             return
           }
           streamRef.current = s
@@ -108,13 +109,16 @@ export default function WorkerPunch() {
           setError(null)
         })
         .catch((e: Error) => {
+          // AbortError is benign — the cleanup tore us down before play()
+          // resolved. Don't surface it to the user.
+          if (e.name === 'AbortError') return
           logger.error(e, { module: 'WorkerPunch', action: 'startSelfieStream', workerId: worker?.id })
           setError(`Camera: ${e.message}`)
         })
     }
     return () => {
       cancelled = true
-      stopStream(streamRef.current)
+      stopStream(streamRef.current, videoEl)
       streamRef.current = null
     }
     // worker?.id deliberately excluded so we don't restart the stream on auth state changes
@@ -224,8 +228,14 @@ export default function WorkerPunch() {
       }
 
       try {
-        const { ok, json } = await postPunch(payload)
-        if (!ok) throw new Error(json.error ?? `Punch failed`)
+        const result = await postPunch(payload)
+        if (!result.ok) {
+          // Server reachable but rejected the punch — surface the error
+          // directly so the worker can fix it (or call the supervisor).
+          // Don't queue: re-trying the same bad payload will keep failing.
+          throw new ServerRejected(result.json.error ?? 'Punch failed')
+        }
+        const { json } = result
         logger.info('punch submitted', {
           module: 'WorkerPunch',
           action: 'submit',
@@ -241,6 +251,18 @@ export default function WorkerPunch() {
         )
         qc.invalidateQueries({ queryKey: ['my-attendance-today'] })
       } catch (e) {
+        if (e instanceof ServerRejected) {
+          logger.error(e, {
+            module: 'WorkerPunch',
+            action: 'submit-rejected',
+            workerId: worker.id,
+            siteId,
+          })
+          setError(e.message)
+          return
+        }
+        // Genuine connectivity failure (TypeError from fetch, AbortError, etc.)
+        // — queue for later sync.
         logger.warn('punch failed — enqueuing offline', {
           module: 'WorkerPunch',
           action: 'enqueue',
@@ -427,6 +449,14 @@ export default function WorkerPunch() {
       </button>
     </RoleScaffold>
   )
+}
+
+/** Marker error so we can distinguish server-side rejections from connectivity failures. */
+class ServerRejected extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ServerRejected'
+  }
 }
 
 async function postPunch(payload: PunchPayload): Promise<{ ok: boolean; json: any }> {

@@ -687,7 +687,37 @@ OLD_GONE=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postg
 test_case "old /old-test row gone"             "$OLD_GONE" '^0$'
 
 echo ""
-echo -e "${YELLOW}=== Phase 41: Final cleanup (reset state for clean re-runs) ===${RESET}"
+echo -e "${YELLOW}=== Phase 41 (M18): briefing-ack id can be synthetic <siteUuid>:<len> string ===${RESET}"
+# Re-activate Priya so we have a token, then punch with a synthetic
+# acknowledgedBriefingId that mimics what Punch.tsx generates when the
+# briefing comes from sites.daily_note (no uuid PK exists yet).
+curl -s -X PATCH "$API_URL/rest/v1/workers?id=eq.44444444-4444-4444-4444-444444444444" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"active"}' > /dev/null
+
+PRIYA_TOKEN=${WORKER_TOKENS[44444444-4444-4444-4444-444444444444]}
+PUNCH_BRIEF=$(curl -s -X POST "$API_URL/functions/v1/punch-submit" \
+    -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $PRIYA_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"siteId\":\"22222222-2222-2222-2222-222222222222\",
+        \"type\":\"in\",
+        \"selfieDataUrl\":\"$SELFIE_DATAURL\",
+        \"gps\":{\"lat\":12.9698,\"lng\":77.7500,\"accuracy_m\":15,\"speed_ms\":null},
+        \"deviceFingerprint\":\"e2e-fp-brief\",
+        \"userAgent\":\"e2e-test-brief\",
+        \"acknowledgedBriefingId\":\"22222222-2222-2222-2222-222222222222:28\"
+    }")
+test_case "punch with synthetic briefing-ack id succeeds" "$PUNCH_BRIEF" '"status":"pending"|"status":"flagged"'
+BRIEF_ID=$(echo "$PUNCH_BRIEF" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+BRIEF_ROW=$(curl -s "$API_URL/rest/v1/attendance?id=eq.$BRIEF_ID&select=briefing_acknowledged_id" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN")
+test_case "synthetic briefing-ack id persisted as text" "$BRIEF_ROW" '"briefing_acknowledged_id":"22222222-2222-2222-2222-222222222222:28"'
+
+echo ""
+echo -e "${YELLOW}=== Phase 42: Final cleanup (reset state for clean re-runs) ===${RESET}"
 
 docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
     update workers set status='invited',
