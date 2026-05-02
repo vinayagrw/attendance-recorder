@@ -8,10 +8,11 @@
 #
 # That detection runs BEFORE wrangler reads any config file, so a root-level
 # wrangler.toml is never consulted. Putting the file here, and running
-# `cd apps/web && npx wrangler deploy`, sidesteps the check.
+# `cd apps/web && npx wrangler pages deploy ./dist`, sidesteps the check.
 #
 # What this tells wrangler:
-#   1. This is a Cloudflare Pages project (not a Worker — different deploy path).
+#   1. This is a Cloudflare Pages project (consumed by `wrangler pages deploy`,
+#      and used as a guard against accidental Workers commands).
 #   2. The static files to upload live at ./dist/ (relative to this file —
 #      i.e. apps/web/dist/ from the repo root).
 #
@@ -21,7 +22,15 @@
 # deploy command (also dashboard-set) cd's into apps/web/ and uploads it.
 #
 # Deploy command (in the dashboard):
-#   cd apps/web && npx wrangler deploy
+#   cd apps/web && npx wrangler pages deploy ./dist
+#
+# Why `wrangler pages deploy` and not `wrangler deploy`?
+#   `wrangler deploy` is the Workers-mode command in 4.x. Running it on a
+#   Pages project errors with:
+#     ✘ It looks like you've run a Workers-specific command in a Pages
+#       project. For Pages, please run `wrangler pages deploy` instead.
+#   The `--assets=` flag is also a Workers concept (Workers Static Assets);
+#   for Pages you pass the directory positionally instead.
 #
 # `name` is intentionally omitted: the CF Pages dashboard already owns the
 # project slug. Specifying it here would error on mismatch. If you ever want
@@ -29,6 +38,6 @@
 # project's name in the dashboard.
 #
 # See docs/cloudflare_setup.md for the full deploy walk-through.
-
+name= "attendance-recorder"
 compatibility_date = "2026-01-01"
-pages_build_output_dir = "dist"
+pages_build_output_dir = "./dist"
