@@ -717,7 +717,68 @@ BRIEF_ROW=$(curl -s "$API_URL/rest/v1/attendance?id=eq.$BRIEF_ID&select=briefing
 test_case "synthetic briefing-ack id persisted as text" "$BRIEF_ROW" '"briefing_acknowledged_id":"22222222-2222-2222-2222-222222222222:28"'
 
 echo ""
-echo -e "${YELLOW}=== Phase 42: Final cleanup (reset state for clean re-runs) ===${RESET}"
+echo -e "${YELLOW}=== Phase 42 (M19): site timezone validation + safe_timezone in analytics ===${RESET}"
+# (a) trigger rejects invalid IANA names
+PROJ_FOR_TZ=$(curl -s -X POST "$API_URL/rest/v1/projects" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" \
+    -d '{"name":"E2E TZ Test","status":"active"}')
+TZ_PROJ_ID=$(echo "$PROJ_FOR_TZ" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+
+BAD_TZ=$(curl -s -X POST "$API_URL/rest/v1/sites" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"project_id\":\"$TZ_PROJ_ID\",
+        \"name\":\"E2E bad timezone\",
+        \"default_lat\":12.97,\"default_lng\":77.75,
+        \"timezone\":\"usa\",
+        \"status\":\"active\"
+    }")
+test_case "trigger rejects timezone='usa' with 22023" "$BAD_TZ" '"22023"|Invalid timezone'
+
+# (b) trigger accepts a valid IANA name
+GOOD_TZ=$(curl -s -X POST "$API_URL/rest/v1/sites" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" \
+    -d "{
+        \"project_id\":\"$TZ_PROJ_ID\",
+        \"name\":\"E2E NY site\",
+        \"default_lat\":40.71,\"default_lng\":-74.01,
+        \"timezone\":\"America/New_York\",
+        \"status\":\"active\"
+    }")
+test_case "trigger accepts timezone='America/New_York'" "$GOOD_TZ" '"timezone":"America/New_York"'
+NY_SITE_ID=$(echo "$GOOD_TZ" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
+
+# (c) safe_timezone() backstops bad data inserted via direct DB writes
+docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
+    -- bypass the trigger by ALTER ... DISABLE TRIGGER for one statement
+    alter table sites disable trigger sites_validate_timezone_ins;
+    alter table sites disable trigger sites_validate_timezone_upd;
+    insert into sites (project_id, name, default_lat, default_lng, timezone, status)
+        values ('$TZ_PROJ_ID', 'E2E legacy bad tz', 12.97, 77.75, 'completely-bogus', 'active');
+    alter table sites enable trigger sites_validate_timezone_ins;
+    alter table sites enable trigger sites_validate_timezone_upd;
+" > /dev/null
+
+# Analytics RPCs must NOT throw on the bogus timezone — they should
+# coalesce to UTC via safe_timezone() and just return rows.
+HPP_TZ=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" -d '{}')
+echo "$HPP_TZ" | grep -q 'time zone .* not recognized' && \
+    { echo -e "  ${RED}✗${RESET} bogus tz still leaks through to analytics"; FAIL=$((FAIL+1)); } || \
+    { echo -e "  ${GREEN}✓${RESET} analytics returns rows even when a site has 'completely-bogus' timezone"; PASS=$((PASS+1)); }
+
+# Cleanup the throwaway project (cascades sites)
+curl -s -X DELETE "$API_URL/rest/v1/projects?id=eq.$TZ_PROJ_ID" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" > /dev/null
+
+echo ""
+echo -e "${YELLOW}=== Phase 43: Final cleanup (reset state for clean re-runs) ===${RESET}"
 
 docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
     update workers set status='invited',

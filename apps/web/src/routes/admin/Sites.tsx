@@ -1,9 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import SiteMapPreview from '@/components/SiteMapPreview'
+
+// IANA timezones offered as autocomplete suggestions. Modern browsers
+// expose every Intl-known zone via supportedValuesOf; fall back to a
+// short curated list on older runtimes that don't.
+function listIanaTimezones(): string[] {
+  type SupportedValuesOf = (key: 'timeZone') => string[]
+  const fn = (Intl as unknown as { supportedValuesOf?: SupportedValuesOf }).supportedValuesOf
+  if (typeof fn === 'function') {
+    try {
+      return fn('timeZone')
+    } catch {
+      /* fall through */
+    }
+  }
+  return [
+    'UTC', 'Asia/Kolkata', 'Asia/Tokyo', 'Asia/Singapore', 'Asia/Dubai',
+    'Europe/London', 'Europe/Paris', 'Europe/Kyiv', 'Europe/Moscow',
+    'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+    'America/Sao_Paulo', 'Africa/Cairo', 'Australia/Sydney',
+  ]
+}
+
+function isValidTimezone(tz: string): boolean {
+  if (!tz) return true // empty allowed — server coalesces to UTC
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: tz })
+    return true
+  } catch {
+    return false
+  }
+}
 
 interface Site {
   id: string
@@ -32,6 +63,7 @@ export default function AdminSites() {
     radius: '150',
     timezone: 'Asia/Kolkata',
   })
+  const timezoneOptions = useMemo(() => listIanaTimezones(), [])
 
   // Pre-fill the project when the URL says so (deep-link from /admin/projects)
   useEffect(() => {
@@ -68,6 +100,11 @@ export default function AdminSites() {
       if (!form.name.trim()) throw new Error('Name required')
       if (!form.project_id) throw new Error('Pick a project')
       if (isNaN(lat) || isNaN(lng)) throw new Error('Lat/lng required')
+      if (form.timezone && !isValidTimezone(form.timezone)) {
+        throw new Error(
+          `Timezone "${form.timezone}" is not a valid IANA name. Try "UTC", "Asia/Kolkata", "America/New_York", etc.`,
+        )
+      }
       const { error } = await supabase.from('sites').insert({
         name: form.name.trim(),
         project_id: form.project_id,
@@ -118,8 +155,24 @@ export default function AdminSites() {
             <input className="input-field" placeholder="Radius m" value={form.radius}
               onChange={(e) => setForm({ ...form, radius: e.target.value })} />
           </div>
-          <input className="input-field" placeholder="Timezone" value={form.timezone}
-            onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
+          <input
+            className="input-field"
+            placeholder="Timezone (IANA — e.g. Asia/Kolkata)"
+            list="iana-timezones"
+            value={form.timezone}
+            onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+            aria-invalid={!!form.timezone && !isValidTimezone(form.timezone)}
+          />
+          {form.timezone && !isValidTimezone(form.timezone) && (
+            <div className="text-xs text-red-700">
+              "{form.timezone}" isn't a valid IANA timezone — try Asia/Kolkata, UTC, America/New_York…
+            </div>
+          )}
+          <datalist id="iana-timezones">
+            {timezoneOptions.map((tz) => (
+              <option key={tz} value={tz} />
+            ))}
+          </datalist>
           <button onClick={() => create.mutate()} className="btn-primary" disabled={create.isPending}>
             {create.isPending ? 'Creating…' : 'Create'}
           </button>
