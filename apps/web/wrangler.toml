@@ -1,0 +1,34 @@
+# Cloudflare Pages config for the Attendance Recorder PWA.
+#
+# Lives at apps/web/wrangler.toml (NOT the repo root) because wrangler 4.x
+# refuses to operate from a pnpm workspace root with:
+#   ✘ The Wrangler application detection logic has been run in the root of
+#     a workspace instead of targeting a specific project. Change your
+#     working directory to one of the applications in the workspace …
+#
+# That detection runs BEFORE wrangler reads any config file, so a root-level
+# wrangler.toml is never consulted. Putting the file here, and running
+# `cd apps/web && npx wrangler deploy`, sidesteps the check.
+#
+# What this tells wrangler:
+#   1. This is a Cloudflare Pages project (not a Worker — different deploy path).
+#   2. The static files to upload live at ./dist/ (relative to this file —
+#      i.e. apps/web/dist/ from the repo root).
+#
+# Build command (set in the CF Pages dashboard → Settings → Builds, NOT here):
+#   pnpm install --frozen-lockfile && pnpm --filter @attendance/web build
+# That command runs from the repo root, produces apps/web/dist/, then the
+# deploy command (also dashboard-set) cd's into apps/web/ and uploads it.
+#
+# Deploy command (in the dashboard):
+#   cd apps/web && npx wrangler deploy
+#
+# `name` is intentionally omitted: the CF Pages dashboard already owns the
+# project slug. Specifying it here would error on mismatch. If you ever want
+# to tie the slug to source control, add `name = "<slug>"` matching the
+# project's name in the dashboard.
+#
+# See docs/cloudflare_setup.md for the full deploy walk-through.
+
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "dist"
