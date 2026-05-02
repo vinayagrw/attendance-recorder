@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import RoleScaffold from '../_RoleScaffold'
 import { BarChart, PieChart, HorizontalBarChart } from '@/components/Charts'
 import { useViewportWidth } from '@/hooks/useViewport'
@@ -43,7 +42,6 @@ const QUICK_RANGES: Array<{ label: string; days: number }> = [
 ]
 
 export default function Analytics() {
-  const navigate = useNavigate()
   const { enabled: flagEnabled } = useFeatureFlag('analytics_dashboard')
   const { enabled: dailyTableEnabled } = useFeatureFlag('daily_attendance_table')
   const { isDesktop } = useViewportWidth()

@@ -62,7 +62,7 @@ grant execute on function is_worker_assigned(uuid, uuid) to anon, authenticated;
 -- 2. PIN reset tracking — workers request a reset, admin/supervisor approves
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists pin_reset_requests (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001',
     worker_id uuid references workers(id) on delete cascade,
     contact_phone text,

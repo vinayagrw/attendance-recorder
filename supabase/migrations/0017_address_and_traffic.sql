@@ -19,7 +19,7 @@ alter table projects
 -- 2. access_events — site traffic / browsing log
 -- ─────────────────────────────────────────────────────────────────────────
 create table if not exists access_events (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     occurred_at timestamptz not null default now(),

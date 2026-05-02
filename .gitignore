@@ -16,11 +16,15 @@ build/
 apps/web/.env
 apps/web/.env.local
 apps/web/.env.*.local
+# Cloud-target Vite env (per-developer, contains publishable key for cloud project)
+apps/web/.env.cloud
+apps/web/.env.cloud.local
 
 # supabase local stack
 supabase/.branches/
 supabase/.temp/
 supabase/.env
+supabase/.env.cloud
 
 # OS / IDE
 .DS_Store

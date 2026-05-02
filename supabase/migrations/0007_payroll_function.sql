@@ -48,7 +48,7 @@ $$;
 
 -- Daily site reports (Raken-style — see docs/feat-daily-site-report.md)
 create table if not exists daily_site_reports (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001',
     site_id uuid not null references sites(id) on delete cascade,
     report_date date not null,

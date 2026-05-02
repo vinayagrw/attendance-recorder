@@ -9,7 +9,7 @@ create extension if not exists pgcrypto;
 -- Reference: organisations (multi-tenant insurance — single org for now)
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists organisations (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     name text not null,
     created_at timestamptz not null default now()
 );
@@ -21,7 +21,7 @@ insert into organisations (id, name)
 -- Projects: a customer/site contract; sites belong to a project
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists projects (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     name text not null,
@@ -40,7 +40,7 @@ create table if not exists projects (
 -- a fallback if a polygon hasn't been drawn yet.
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists sites (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     project_id uuid not null references projects(id) on delete cascade,
@@ -77,7 +77,7 @@ create table if not exists supervisors (
 -- Workers: no Supabase Auth account; PIN-based via Edge Function
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists workers (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     full_name text not null,
@@ -99,7 +99,7 @@ create index if not exists workers_status_idx on workers(status);
 -- Worker can be on multiple sites (rotation). Replaces the old
 -- workers.assigned_site_id from the v1 plan.
 create table if not exists worker_site_assignments (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     worker_id uuid not null references workers(id) on delete cascade,
     site_id uuid not null references sites(id) on delete cascade,
     is_primary boolean not null default false,
@@ -116,7 +116,7 @@ create unique index if not exists wsa_one_primary
 -- Attendance: immutable insert; status updated by supervisor
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists attendance (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     worker_id uuid not null references workers(id),
@@ -152,7 +152,7 @@ create index if not exists attendance_pending on attendance(status, punched_at d
 -- Device & login attempts (security log)
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists device_logs (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     worker_id uuid references workers(id),
@@ -172,7 +172,7 @@ create index if not exists device_logs_worker_time on device_logs(worker_id, cre
 -- (chain trigger added in 0003_audit_chain.sql)
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists audit_log (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id),
     actor_id uuid,
