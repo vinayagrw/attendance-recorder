@@ -1272,29 +1272,11 @@ attendance-recorder/
 ## 🚀 Next Steps After Setup
 
 1. **Try worker flow:** Pick "Ravi Kumar" → PIN `1234` → Punch in/out
-2. **Approve as supervisor:** Login as `viagr@ciklum.com` / `LocalDev2026!` → approve Ravi
+2. **Approve as supervisor:** Login as ` / `LocalDev2026!` → approve Ravi
 3. **Explore anomalies:** Set site location; punch 10km away to see geofence flag
 4. **Check analytics:** Supervisor → Analytics tab
 5. **Export payroll:** Supervisor → Reports → CSV download
 6. **Architecture:** See [plan.md](plan.md) for full design & roadmap
-
----
-
-## 📄 License
-
-**UNLICENSED**. Pick before commercial: MIT, Apache 2.0, or Proprietary.
-
----
-
-## 🤝 Contributing
-
-1. Create feature branch from `main`
-2. Make changes + write tests
-3. Run: `bash scripts/cleanup-tables.sh && pnpm typecheck && pnpm build && bash scripts/e2e.sh && pnpm test:e2e`
-4. All tests must pass
-5. Push → GitHub Actions auto-runs CI
-6. Open PR
-7. Merge after approval (auto-deploys)
 
 ---
 
