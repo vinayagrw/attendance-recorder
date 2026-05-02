@@ -4,12 +4,142 @@ Day-in-the-life operations for the Attendance Recorder. Use this when on-call.
 
 ## Stack at a glance
 
-| Layer | Service | URL (local) |
-|---|---|---|
-| Frontend | Cloudflare Pages (prod) / Vite dev (`pnpm dev`) | http://localhost:5175 |
-| API + Auth + Storage + Functions | Supabase | http://127.0.0.1:54321 |
-| DB | Postgres (in Docker locally) | postgresql://postgres:postgres@127.0.0.1:54322/postgres |
-| Studio | Supabase Studio | http://127.0.0.1:54323 |
+| Layer                            | Service                                         | URL (local)                                             | URL (cloud dev)                                      |
+|----------------------------------|-------------------------------------------------|---------------------------------------------------------|------------------------------------------------------|
+| Frontend                         | Cloudflare Pages (prod) / Vite dev (`pnpm dev`) | http://localhost:5175                                   | (same — Vite dev points at cloud via `--mode cloud`) |
+| API + Auth + Storage + Functions | Supabase                                        | http://127.0.0.1:54321                                  | https://&lt;ref&gt;.supabase.co                      |
+| DB                               | Postgres (in Docker locally)                    | postgresql://postgres:postgres@127.0.0.1:54322/postgres | (managed; `npx supabase db remote-connect-string`)   |
+| Studio                           | Supabase Studio                                 | http://127.0.0.1:54323                                  | https://supabase.com/dashboard/project/&lt;ref&gt;   |
+
+## Cloud dev project — first-time setup (~30 min)
+
+These steps stand up a hosted Supabase project on supabase.com used **only as a dev environment** (not prod). The local Docker stack stays the inner-loop dev target; cloud is for off-laptop demos and real-device camera/GPS testing. Mirrors M20 plan; defer to that file for context.
+
+### Defaults assumed (call out if different)
+- Region: `ap-south-1` (Mumbai)
+- Tier: Free
+- Project name: `attendance-recorder-dev`
+
+### 1. Create the project
+1. https://supabase.com → sign in with GitHub.
+2. **New project** → name `attendance-recorder-dev`, generate DB password (store in your password manager), region Mumbai, plan Free.
+3. After provisioning (~2 min), capture from **Project Settings → API**:
+   - Project URL: `https://<ref>.supabase.co`
+   - `anon` / publishable key (`sb_publishable_…`)
+   - `service_role` key (server-only, **never** ship to the browser)
+
+### 2. Enable extensions
+Studio → **Database → Extensions**, toggle ON: `postgis`, `pgcrypto`, `pg_cron`, `pg_net`, `uuid-ossp`. Migration `0001_init.sql` line 5 will fail otherwise.
+
+### 3. Configure Auth
+Studio → **Authentication → Providers → Email**:
+- Enable email signup: **ON** (worker register flow uses synthetic-email signup; do not mirror `config.toml`'s `enable_signup = false`, that's local-only).
+- Confirm email: **OFF** (synthetic emails can't receive real mail).
+- Min password length: 6.
+
+Studio → **Authentication → URL Configuration**: site URL `http://localhost:5173`; add `5174`/`5175` to redirect URLs. Add Pages domain when prod ships.
+
+### 4. Link the CLI
+```bash
+npx supabase login                       # browser flow
+npx supabase link --project-ref <ref>    # writes supabase/.temp/project-ref
+npx supabase projects list               # verify
+```
+
+### 5. Apply migrations
+```bash
+npx supabase db push
+```
+Walks `supabase/migrations/*.sql` in order. The four-digit naming (`0001_init.sql` … `0020_safe_timezone.sql`) sorts correctly — no rename needed. If `db push` rejects them, follow the rename one-liner in `~/.claude/plans/i-need-to-build-binary-giraffe.md` §Risks.
+
+### 6. Verify Storage bucket exists
+Migration `0006_storage_buckets.sql` creates the `selfies` bucket. Verify:
+```bash
+npx supabase db remote query "select id, public from storage.buckets;"
+# expect: selfies | f
+```
+If missing, Studio → **Storage → New bucket → name `selfies` → private**.
+
+### 7. Set Edge Function secrets
+```bash
+npx supabase secrets set \
+  SUPABASE_URL=https://<ref>.supabase.co \
+  SUPABASE_SERVICE_ROLE_KEY=<service-role> \
+  SUPABASE_ANON_KEY=<anon> \
+  ATT_MAX_GPS_ACCURACY_M=100 \
+  ATT_DRIVING_THRESHOLD_MS=2.222 \
+  ATT_IMPLAUSIBLE_SPEED_MS=33 \
+  ATT_GEOFENCE_FAR_THRESHOLD_M=30 \
+  ATT_BUDDY_PUNCH_WINDOW_HRS=12 \
+  ATT_SELFIES_BUCKET=selfies \
+  ATT_MIN_PIN_LENGTH=4 \
+  ATT_MAX_PIN_LENGTH=6 \
+  ATT_EMIT_PUNCH_ACCESS_EVENT=true
+
+npx supabase secrets list                # verify
+```
+
+### 8. Deploy the 6 Edge Functions
+```bash
+npx supabase functions deploy worker-register
+npx supabase functions deploy worker-pin-reset
+npx supabase functions deploy punch-submit
+npx supabase functions deploy payroll-export
+npx supabase functions deploy auto-close-shifts
+npx supabase functions deploy selfie-retention-cron
+```
+Each function bundles the `_shared/config.ts` + `_shared/log.ts` helpers automatically via the relative imports.
+
+### 9. Seed dev data
+```bash
+psql "$(npx supabase db remote-connect-string)" -f supabase/seed.sql
+```
+Inserts the 1 project + 1 site + 3 workers (Ravi/Priya/Anil) used by the local seed.
+
+### 10. Schedule crons
+Studio → SQL Editor (replace `<ref>` and `<service-role>`):
+```sql
+select cron.schedule('auto-close-shifts', '*/30 * * * *',
+  $$ select net.http_post(
+       url := 'https://<ref>.supabase.co/functions/v1/auto-close-shifts',
+       headers := jsonb_build_object('Authorization', 'Bearer <service-role>')
+     ) $$);
+
+select cron.schedule('selfie-retention-cron', '0 3 * * *',
+  $$ select net.http_post(
+       url := 'https://<ref>.supabase.co/functions/v1/selfie-retention-cron',
+       headers := jsonb_build_object('Authorization', 'Bearer <service-role>')
+     ) $$);
+```
+Verify: `select jobname, schedule from cron.job;`.
+
+### 11. Wire Vite to cloud (without touching `apps/web/.env.local`)
+Create `apps/web/.env.cloud` (gitignore — see root `.gitignore`):
+```
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+Run dev against cloud:
+```bash
+cd apps/web
+pnpm dev --mode cloud
+```
+`pnpm dev` (no `--mode`) still runs against local Docker. The two flows can be open in different terminals on different ports without conflict.
+
+### 12. Smoke test
+1. http://localhost:5173 → register `Ravi Kumar` with PIN `1234`.
+2. Studio → **Authentication → Users** — should show `33333333-…@worker.local`.
+3. Approve in `/supervisor/approvals`.
+4. Punch in → check `attendance` row in Studio → check `selfies` bucket has the photo.
+5. `/admin/traffic` should show `page_view` and `login` rows in `access_events`.
+
+### 13. Tail edge function logs (verify M20 logging works)
+```bash
+npx supabase functions logs punch-submit --tail
+```
+Each call now emits a structured JSON line per `step` (e.g. `{"level":"info","fn":"punch-submit","step":"done", …}`). On error, you get the offending step + stack frames; PII (PIN, selfie data URL) is redacted by `_shared/log.ts`.
+
+---
 
 ## Daily checks (5 minutes)
 
@@ -35,10 +165,16 @@ Always read the diff Supabase prints before confirming. **Never run `db reset` a
 ### Edge Functions
 ```bash
 npx supabase functions deploy worker-register
+npx supabase functions deploy worker-pin-reset
 npx supabase functions deploy punch-submit
 npx supabase functions deploy payroll-export
 npx supabase functions deploy auto-close-shifts
 npx supabase functions deploy selfie-retention-cron
+```
+
+To tail logs after a deploy (M20 added structured JSON lines to all six):
+```bash
+npx supabase functions logs <name> --tail
 ```
 
 Set secrets once per project:
@@ -117,5 +253,5 @@ Supabase Pro tier: daily automatic backups, 7-day retention. Free tier: no manag
 ## Observability TODO (post-MVP)
 
 - Wire **Sentry** in `apps/web/src/main.tsx` (5k events/mo free).
-- Cron heartbeat: have `auto-close-shifts` POST to a Healthchecks.io URL on success. Free.
+- Cron heartbeat: have `auto-close-shifts` POST to a Health checks.io URL on success. Free.
 - Database alerts: Studio → Reports → "DB CPU > 70%" — opt-in.
