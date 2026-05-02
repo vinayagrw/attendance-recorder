@@ -138,7 +138,11 @@ export default function WorkerRegister() {
 
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: anon },
+        headers: { 
+          'Content-Type': 'application/json', 
+          apikey: anon,
+          Authorization: `Bearer ${anon}` 
+        },
         body: JSON.stringify(payload),
       })
       const json = (await res.json()) as Record<string, unknown>

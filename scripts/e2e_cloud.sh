@@ -12,8 +12,36 @@
 
 set -e
 
-#API_URL="${API_URL:-http://127.0.0.1:54321}"
-#ANON_KEY="${ANON_KEY:-sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH}"
+GREEN="\033[0;32m"
+RED="\033[0;31m"
+YELLOW="\033[0;33m"
+RESET="\033[0m"
+
+echo -e "${RED}================================================================${RESET}"
+echo -e "${RED}WARNING: THIS SCRIPT WILL WIPE DATA IN THE TARGET DATABASE!${RESET}"
+echo -e "Target API: $API_URL"
+echo -e "${RED}================================================================${RESET}"
+read -p "Are you sure you want to run this? (type 'yes' to confirm): " confirm
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+fi
+# Set your connection details
+DB_PASS="Rokcy@78717"
+DB_CMD="psql -h aws-1-us-east-2.pooler.supabase.com -p 6543 -d postgres -U postgres.gryuohugoausgomeosdr"
+
+# Helper function to run psql using docker (since psql might not be installed locally)
+run_psql() {
+    if docker ps 2>/dev/null | grep -q "supabase_db_"; then
+        DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep "supabase_db_" | head -n 1)
+        docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" $DB_CMD "$@"
+    else
+        docker run --rm -i -e PGPASSWORD="$DB_PASS" postgres:15-alpine $DB_CMD "$@"
+    fi
+}
+
+#API_URL="${API_URL:-https://gryuohugoausgomeosdr.supabase.co}"
+#ANON_KEY="${ANON_KEY:-sb_publishable_U7zsYG6ITS9R9F5UhGKxtA_kCbgzLtf}"
 #SUPERVISOR_EMAIL="${SUPERVISOR_EMAIL:-viagr@ciklum.com}"
 #SUPERVISOR_PASS="${SUPERVISOR_PASS:-LocalDev2026!}"
 
@@ -52,6 +80,7 @@ echo -e "${YELLOW}=== Phase 1: Anonymous pick-list ===${RESET}"
 
 PICKLIST=$(curl -s -X POST "$API_URL/rest/v1/rpc/list_active_workers" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d '{}')
 test_case "anon can list workers via RPC" "$PICKLIST" '"Ravi Kumar"|"Priya Singh"|"Anil Yadav"'
@@ -59,14 +88,17 @@ test_case "anon can list workers via RPC" "$PICKLIST" '"Ravi Kumar"|"Priya Singh
 echo ""
 echo -e "${YELLOW}=== Phase 2: Reset all workers to invited (idempotent test re-run) ===${RESET}"
 
-docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
+run_psql -c "
     update workers set status='invited',
         pin_hash=null, baseline_selfie_url=null, auth_user_id=null,
         registered_at=null, approved_at=null, approved_by=null;
     delete from auth.users where email like '%@worker.local';
     delete from attendance;
-" > /dev/null 2>&1
+"
 echo "  reset workers + cleared synthetic auth users + cleared attendance"
+
+echo "  injecting seed data so cloud database has the expected mock workers/sites..."
+run_psql < "supabase/seed.sql"
 
 echo ""
 echo -e "${YELLOW}=== Phase 3: Worker registration (all 3 workers) ===${RESET}"
@@ -81,6 +113,7 @@ for triplet in "${WORKER_IDS[@]}"; do
     IFS=':' read -r WID NAME PIN <<< "$triplet"
     REG=$(curl -s -X POST "$API_URL/functions/v1/worker-register" \
         -H "apikey: $ANON_KEY" \
+        -H "Authorization: Bearer $ANON_KEY" \
         -H "Content-Type: application/json" \
         -d "{
             \"workerId\":\"$WID\",
@@ -98,6 +131,7 @@ echo -e "${YELLOW}=== Phase 4: Worker login BEFORE approval (should be allowed b
 
 LOGIN_RAVI=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d '{"email":"33333333-3333-3333-3333-333333333333@worker.local","password":"1234-33333333"}')
 test_case "Ravi can sign in (auth succeeds; punch will be gated)" "$LOGIN_RAVI" '"access_token"'
@@ -107,6 +141,7 @@ echo -e "${YELLOW}=== Phase 5: Supervisor login + approves all 3 workers ===${RE
 
 SUPER_LOGIN=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d "{\"email\":\"$SUPERVISOR_EMAIL\",\"password\":\"$SUPERVISOR_PASS\"}")
 test_case "supervisor login" "$SUPER_LOGIN" '"access_token"'
@@ -127,7 +162,7 @@ done
 echo ""
 echo -e "${YELLOW}=== Phase 6: Audit trail captures the approvals ===${RESET}"
 
-AUDIT_COUNT=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+AUDIT_COUNT=$(run_psql -tA -c "
     select count(*) from audit_log
     where action = 'update_workers' and target_table = 'workers'
       and after_state->>'status' = 'active';
@@ -144,6 +179,7 @@ for triplet in "${WORKER_IDS[@]}"; do
     IFS=':' read -r WID NAME PIN <<< "$triplet"
     LOGIN=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
         -H "apikey: $ANON_KEY" \
+        -H "Authorization: Bearer $ANON_KEY" \
         -H "Content-Type: application/json" \
         -d "{\"email\":\"$WID@worker.local\",\"password\":\"$PIN-${WID:0:8}\"}")
     TOKEN=$(echo "$LOGIN" | grep -o '"access_token":"[^"]*"' | sed 's/.*:"//;s/"$//')
@@ -257,6 +293,7 @@ curl -s -X PATCH "$API_URL/rest/v1/workers?id=eq.55555555-5555-5555-5555-5555555
 
 ANIL_LOGIN_AFTER_BAN=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d '{"email":"55555555-5555-5555-5555-555555555555@worker.local","password":"9012-55555555"}')
 test_case "offboarded Anil cannot sign in (banned_until trigger)" "$ANIL_LOGIN_AFTER_BAN" '"error_description"|"error":|"msg":'
@@ -345,6 +382,7 @@ curl -s -X PATCH "$API_URL/rest/v1/workers?id=eq.55555555-5555-5555-5555-5555555
 PIN_REQ_BODY='{"worker_id":"55555555-5555-5555-5555-555555555555","note":"Forgot PIN, requesting reset","requested_pin":"7777"}'
 PIN_REQ_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/rest/v1/pin_reset_requests" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d "$PIN_REQ_BODY")
 test_case "anon insert pin_reset_request (HTTP 201)" "$PIN_REQ_CODE" '^201$'
@@ -366,6 +404,7 @@ test_case "supervisor approves via requestId" "$APPROVE" '"ok":true'
 
 LOGIN_NEW=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d '{"email":"55555555-5555-5555-5555-555555555555@worker.local","password":"7777-55555555"}')
 test_case "Anil can sign in with new PIN" "$LOGIN_NEW" '"access_token"'
@@ -383,7 +422,7 @@ test_case "site briefing update with daily_note_updated_at" "$NOTE_UPDATE" '"dai
 echo ""
 echo -e "${YELLOW}=== Phase 21 (M13): bulk verify multiple attendance rows ===${RESET}"
 # Grab two flagged attendance ids and verify both in one PATCH
-FLAGGED_IDS=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+FLAGGED_IDS=$(run_psql -tA -c "
     select id from attendance where status = 'flagged' limit 2;
 " | tr -d ' ' | tr '\n' ',' | sed 's/,$//')
 FLAG_COUNT=$(echo "$FLAGGED_IDS" | tr ',' '\n' | grep -c -E '^[a-f0-9-]+$' || true)
@@ -440,6 +479,7 @@ echo -e "${YELLOW}=== Phase 23 (M15): access_events anon insert + supervisor rea
 ACCESS_BODY='{"actor_type":"anon","event_type":"page_view","route":"/worker/login","user_agent":"e2e-test-agent","device_fingerprint":"e2e-fp-anon","metadata":{"language":"en-US","timezone":"Asia/Kolkata"}}'
 ACCESS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/rest/v1/access_events" \
     -H "apikey: $ANON_KEY" \
+    -H "Authorization: Bearer $ANON_KEY" \
     -H "Content-Type: application/json" \
     -d "$ACCESS_BODY")
 test_case "anon can INSERT access_event (HTTP 201)" "$ACCESS_CODE" '^201$'
@@ -502,7 +542,7 @@ test_case "selfie_sha256 persisted" "$META_ROW" '"selfie_sha256":"abc123def456"'
 
 echo ""
 echo -e "${YELLOW}=== Phase 26 (M13): audit log captures before/after diff ===${RESET}"
-AUDIT_DIFF=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+AUDIT_DIFF=$(run_psql -tA -c "
     select count(*) from audit_log
     where action = 'update_workers'
       and before_state ? 'status'
@@ -599,7 +639,7 @@ echo ""
 echo -e "${YELLOW}=== Phase 34 (M17): analytics_daily_attendance shows orphan IN with NULL out ===${RESET}"
 # Insert an IN-only attendance for Anil (re-activated by Phase 19) at Tower A,
 # 2 hours ago, no OUT counterpart. Expect a row with hours_worked=null.
-ORPHAN_TS=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+ORPHAN_TS=$(run_psql -tA -c "
     insert into attendance (worker_id, site_id, type, status, punched_at, gps_accuracy_m, device_lat, device_lng)
     values ('55555555-5555-5555-5555-555555555555',
             '22222222-2222-2222-2222-222222222222',
@@ -617,7 +657,7 @@ echo ""
 echo -e "${YELLOW}=== Phase 35 (M17): analytics_hours_per_project sums full shift correctly ===${RESET}"
 # Insert IN @ 08:00 today + OUT @ 17:00 today for Ravi, both verified.
 # Expect total_hours ~= 9.
-docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+run_psql -tA -c "
     delete from attendance where worker_id='33333333-3333-3333-3333-333333333333' and punched_at::date = current_date;
     insert into attendance (worker_id, site_id, type, status, punched_at, gps_accuracy_m, device_lat, device_lng) values
         ('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','in', 'verified', current_date::timestamp + interval '8 hours', 15, 12.9698, 77.7500),
@@ -632,7 +672,7 @@ test_case "total_hours for Ravi 08:00→17:00 == 9.00" "$HPP_SHIFT" '"total_hour
 echo ""
 echo -e "${YELLOW}=== Phase 36 (M17): duplicate IN within shift uses first-in / last-out ===${RESET}"
 # Add a duplicate IN at 09:00 — first-in is still 08:00, last-out 17:00 ⇒ still 9h.
-docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+run_psql -tA -c "
     insert into attendance (worker_id, site_id, type, status, punched_at, gps_accuracy_m, device_lat, device_lng) values
         ('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','in', 'verified', current_date::timestamp + interval '9 hours', 15, 12.9698, 77.7500);
 " > /dev/null
@@ -671,22 +711,22 @@ test_case "filter options include Ravi as a worker"    "$OPTS" 'Ravi Kumar'
 echo ""
 echo -e "${YELLOW}=== Phase 40 (M17): purge_old_access_events deletes only old rows ===${RESET}"
 # Seed: insert 2 access_events; backdate the first one 100 days; new one stays.
-docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+run_psql -tA -c "
     insert into access_events (actor_type, event_type, route, occurred_at)
         values ('anon','page_view','/old-test', now() - interval '100 days') returning id;
     insert into access_events (actor_type, event_type, route, occurred_at)
         values ('anon','page_view','/new-test', now()) returning id;
 " > /dev/null
-PURGE=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+PURGE=$(run_psql -tA -c "
     select deleted_count, kept_count from purge_old_access_events(30);
 ")
 echo "  purge result: $PURGE"
 test_case "purge removed ≥1 old row"  "$PURGE" '^[1-9][0-9]*\|'
-NEW_KEPT=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+NEW_KEPT=$(run_psql -tA -c "
     select count(*) from access_events where route = '/new-test';
 ")
 test_case "fresh /new-test row still present"  "$NEW_KEPT" '^[1-9][0-9]*$'
-OLD_GONE=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+OLD_GONE=$(run_psql -tA -c "
     select count(*) from access_events where route = '/old-test';
 ")
 test_case "old /old-test row gone"             "$OLD_GONE" '^0$'
@@ -759,7 +799,7 @@ test_case "trigger accepts timezone='America/New_York'" "$GOOD_TZ" '"timezone":"
 NY_SITE_ID=$(echo "$GOOD_TZ" | grep -oE '"id":"[a-f0-9-]+"' | head -1 | sed 's/.*:"//;s/"$//')
 
 # (c) safe_timezone() backstops bad data inserted via direct DB writes
-docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
+run_psql -c "
     -- bypass the trigger by ALTER ... DISABLE TRIGGER for one statement
     alter table sites disable trigger sites_validate_timezone_ins;
     alter table sites disable trigger sites_validate_timezone_upd;
@@ -785,7 +825,7 @@ curl -s -X DELETE "$API_URL/rest/v1/projects?id=eq.$TZ_PROJ_ID" \
 echo ""
 echo -e "${YELLOW}=== Phase 43: Final cleanup (reset state for clean re-runs) ===${RESET}"
 
-docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
+run_psql -c "
     update workers set status='invited',
         pin_hash=null, baseline_selfie_url=null, auth_user_id=null,
         registered_at=null, approved_at=null, approved_by=null;

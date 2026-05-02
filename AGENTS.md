@@ -113,5 +113,37 @@ bash scripts/cleanup-tables.sh  # Wipes attendance + audit + device logs + worke
 - Client-side photo compression (target ≤100KB JPEG)
 - Selfie watermark with timestamp/GPS overlay for tamper evidence
 - IndexedDB offline queue prevents data loss on network issues
-- Supervisor dashboard shows only today's data with realtime updates</content>
-<parameter name="filePath">C:\Users\viagr\Documents\Vinay\git\attendance-recorder\AGENTS.md
+- Supervisor dashboard shows only today's data with realtime updates
+
+## AI Agent Guidelines
+
+### Documentation Generation
+- **Avoid**: Creating multiple descriptive markdown files (IMPLEMENTATION_GAPS.md, GAP_ANALYSIS_SUMMARY.md, ISSUE_REFERENCE_TREE.md, etc.) unless explicitly requested by user
+- **Prefer**: Single consolidated document with clear sections and cross-references (e.g., one GAPS_AND_FIXES.md with all details)
+- **Pattern**: Maximum 2 files per analysis:
+  1. **ONE** comprehensive analysis file (sections: issues, impact, fixes, troubleshooting)
+  2. **ONE** action/howto file (step-by-step for users to follow)
+- **Update AGENTS.md**: When making major modifications to project patterns or conventions, update this file instead of creating new docs
+- **Exception**: Only create separate docs if user explicitly says "create multiple guides" or "make separate docs for X, Y, Z"
+
+### Supabase Cloud vs Local Development
+- **Local (`npx supabase start`)**: Use `npx supabase db reset` to wipe + rebuild database
+- **Production Cloud**: **NEVER** use `db reset`; use `npx supabase db push` to apply migrations safely
+  - `db reset` only works with local Docker containers
+  - `db push` safely applies migrations to cloud without data loss
+  - **ALWAYS** link to project first: `npx supabase link --project-ref <ref>`
+  - **ALWAYS** review the diff before confirming: `npx supabase db push` will prompt
+
+### Task Analysis Before Implementation
+- **Gather**: What's missing/broken? (use semantic_search + grep to understand codebase)
+- **Analyze**: Create ONE consolidated analysis document with:
+  - Issue list with ID + severity + location
+  - Before/after impact table
+  - Single migration/PR to fix all issues
+  - Troubleshooting section for common failures
+- **Avoid**: Creating 4-5 separate documentation files for a single problem
+
+### Code Change Patterns
+- Prefer: Consolidating fixes into a single migration (0021_critical_fixes.sql) rather than multiple files
+- Prefer: Inline comments in code explaining why + what was wrong
+- Test: Always verify changes don't break existing tests (`bash scripts/e2e.sh`)
