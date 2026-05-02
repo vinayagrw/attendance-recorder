@@ -544,7 +544,150 @@ curl -s -X DELETE "$API_URL/rest/v1/projects?id=eq.$ARCH_PROJ_ID" \
     -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" > /dev/null
 
 echo ""
-echo -e "${YELLOW}=== Phase 28: Final cleanup (reset state for clean re-runs) ===${RESET}"
+echo -e "${YELLOW}=== Phase 29 (M17): analytics_hours_per_project rejects project NAME as UUID ===${RESET}"
+# ASCII-only payload so curl in any shell delivers it intact (was failing on
+# em-dashes when piped through Windows bash). Tests the same NAME-as-UUID
+# guard the dropdown bug needed.
+HPP_BAD_NAME=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_project_id":"Amli"}')
+test_case "passing a project NAME instead of UUID returns 22P02 / invalid input syntax" \
+    "$HPP_BAD_NAME" '"22P02"|invalid input syntax for type uuid'
+
+echo ""
+echo -e "${YELLOW}=== Phase 30 (M17): analytics_hours_per_project accepts a real UUID ===${RESET}"
+HPP_OK=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_project_id":"11111111-1111-1111-1111-111111111111"}')
+test_case "real UUID returns the Demo Project row" "$HPP_OK" 'Demo Project — Bangalore Tower A'
+
+echo ""
+echo -e "${YELLOW}=== Phase 31 (M17): analytics_daily_attendance honors p_site_id ===${RESET}"
+DA_SITE=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_daily_attendance" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_site_id":"22222222-2222-2222-2222-222222222222"}')
+SITE_ROWS=$(echo "$DA_SITE" | grep -oE '"site_id":"[^"]+"' | sort -u | wc -l | tr -d ' ')
+test_case "every row has site_id = Tower A (count of distinct sites = 1)" "$SITE_ROWS" '^[01]$'
+
+echo ""
+echo -e "${YELLOW}=== Phase 32 (M17): analytics_daily_attendance honors p_worker_id ===${RESET}"
+DA_WORKER=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_daily_attendance" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_worker_id":"33333333-3333-3333-3333-333333333333"}')
+NON_RAVI=$(echo "$DA_WORKER" | grep -oE '"worker_id":"[^"]+"' | grep -v '33333333' | wc -l | tr -d ' ')
+test_case "filtering by Ravi returns 0 non-Ravi rows" "$NON_RAVI" '^0$'
+
+echo ""
+echo -e "${YELLOW}=== Phase 33 (M17): analytics_daily_attendance p_statuses=['flagged'] only ===${RESET}"
+DA_STATUS=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_daily_attendance" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_statuses":["flagged"]}')
+NON_FLAGGED=$(echo "$DA_STATUS" | grep -oE '"status":"[^"]+"' | grep -v 'flagged' | wc -l | tr -d ' ')
+test_case "filtering by status=flagged returns 0 non-flagged rows" "$NON_FLAGGED" '^0$'
+
+echo ""
+echo -e "${YELLOW}=== Phase 34 (M17): analytics_daily_attendance shows orphan IN with NULL out ===${RESET}"
+# Insert an IN-only attendance for Anil (re-activated by Phase 19) at Tower A,
+# 2 hours ago, no OUT counterpart. Expect a row with hours_worked=null.
+ORPHAN_TS=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    insert into attendance (worker_id, site_id, type, status, punched_at, gps_accuracy_m, device_lat, device_lng)
+    values ('55555555-5555-5555-5555-555555555555',
+            '22222222-2222-2222-2222-222222222222',
+            'in', 'verified', now() - interval '2 hours', 15, 12.9698, 77.7500)
+    returning punched_at;
+")
+DA_ORPHAN=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_daily_attendance" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_worker_id":"55555555-5555-5555-5555-555555555555","p_statuses":["verified","auto_closed","flagged","pending"]}')
+test_case "orphan IN appears with punch_out_time:null" "$DA_ORPHAN" '"punch_out_time":null'
+test_case "orphan IN has hours_worked:null"            "$DA_ORPHAN" '"hours_worked":null'
+
+echo ""
+echo -e "${YELLOW}=== Phase 35 (M17): analytics_hours_per_project sums full shift correctly ===${RESET}"
+# Insert IN @ 08:00 today + OUT @ 17:00 today for Ravi, both verified.
+# Expect total_hours ~= 9.
+docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    delete from attendance where worker_id='33333333-3333-3333-3333-333333333333' and punched_at::date = current_date;
+    insert into attendance (worker_id, site_id, type, status, punched_at, gps_accuracy_m, device_lat, device_lng) values
+        ('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','in', 'verified', current_date::timestamp + interval '8 hours', 15, 12.9698, 77.7500),
+        ('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','out','verified', current_date::timestamp + interval '17 hours', 15, 12.9698, 77.7500);
+" > /dev/null
+HPP_SHIFT=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_project_id":"11111111-1111-1111-1111-111111111111","p_worker_id":"33333333-3333-3333-3333-333333333333","p_statuses":["verified"]}')
+test_case "total_hours for Ravi 08:00→17:00 == 9.00" "$HPP_SHIFT" '"total_hours":9(\.0+)?'
+
+echo ""
+echo -e "${YELLOW}=== Phase 36 (M17): duplicate IN within shift uses first-in / last-out ===${RESET}"
+# Add a duplicate IN at 09:00 — first-in is still 08:00, last-out 17:00 ⇒ still 9h.
+docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    insert into attendance (worker_id, site_id, type, status, punched_at, gps_accuracy_m, device_lat, device_lng) values
+        ('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','in', 'verified', current_date::timestamp + interval '9 hours', 15, 12.9698, 77.7500);
+" > /dev/null
+HPP_DUP=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_project_id":"11111111-1111-1111-1111-111111111111","p_worker_id":"33333333-3333-3333-3333-333333333333","p_statuses":["verified"]}')
+test_case "duplicate IN at 09:00 still yields total_hours=9.00 (first-in/last-out)" \
+    "$HPP_DUP" '"total_hours":9(\.0+)?'
+
+echo ""
+echo -e "${YELLOW}=== Phase 37 (M17): analytics_hours_per_worker_project p_worker_id filter ===${RESET}"
+HPW=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_worker_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_worker_id":"33333333-3333-3333-3333-333333333333","p_statuses":["verified"]}')
+NON_RAVI_WP=$(echo "$HPW" | grep -oE '"worker_id":"[^"]+"' | grep -v '33333333' | wc -l | tr -d ' ')
+test_case "p_worker_id filter excludes other workers" "$NON_RAVI_WP" '^0$'
+
+echo ""
+echo -e "${YELLOW}=== Phase 38 (M17): analytics_hours_per_worker_project rejects worker NAME as UUID ===${RESET}"
+HPW_BAD=$(curl -s -X POST "$API_URL/rest/v1/rpc/analytics_hours_per_worker_project" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"p_project_id":"Amli"}')
+test_case "name in p_project_id returns 22P02" "$HPW_BAD" '"22P02"|invalid input syntax for type uuid'
+
+echo ""
+echo -e "${YELLOW}=== Phase 39 (M17): attendance_filter_options returns sites + workers ===${RESET}"
+OPTS=$(curl -s -X POST "$API_URL/rest/v1/rpc/attendance_filter_options" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $SUPER_TOKEN" \
+    -H "Content-Type: application/json" -d '{}')
+test_case "filter options include Tower A as a site"   "$OPTS" 'Tower A'
+test_case "filter options include Ravi as a worker"    "$OPTS" 'Ravi Kumar'
+
+echo ""
+echo -e "${YELLOW}=== Phase 40 (M17): purge_old_access_events deletes only old rows ===${RESET}"
+# Seed: insert 2 access_events; backdate the first one 100 days; new one stays.
+docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    insert into access_events (actor_type, event_type, route, occurred_at)
+        values ('anon','page_view','/old-test', now() - interval '100 days') returning id;
+    insert into access_events (actor_type, event_type, route, occurred_at)
+        values ('anon','page_view','/new-test', now()) returning id;
+" > /dev/null
+PURGE=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    select deleted_count, kept_count from purge_old_access_events(30);
+")
+echo "  purge result: $PURGE"
+test_case "purge removed ≥1 old row"  "$PURGE" '^[1-9][0-9]*\|'
+NEW_KEPT=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    select count(*) from access_events where route = '/new-test';
+")
+test_case "fresh /new-test row still present"  "$NEW_KEPT" '^[1-9][0-9]*$'
+OLD_GONE=$(docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -tA -c "
+    select count(*) from access_events where route = '/old-test';
+")
+test_case "old /old-test row gone"             "$OLD_GONE" '^0$'
+
+echo ""
+echo -e "${YELLOW}=== Phase 41: Final cleanup (reset state for clean re-runs) ===${RESET}"
 
 docker exec supabase_db_attendance-recorder psql -U postgres -d postgres -c "
     update workers set status='invited',

@@ -57,7 +57,7 @@ export const APP_CONFIG = {
    * screen. Server-side enforcement lives in `ATT_MAX_GPS_ACCURACY_M`
    * (Edge Functions config) — keep them in sync for consistent UX.
    */
-  GPS_MAX_ACCURACY_M: num('VITE_GPS_MAX_ACCURACY_M', 100),
+  GPS_MAX_ACCURACY_M: num('VITE_GPS_MAX_ACCURACY_M', 200),
 
   // ─── Traffic logger / queries ──────────────────────────────────────────
 

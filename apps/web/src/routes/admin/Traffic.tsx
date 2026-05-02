@@ -103,6 +103,31 @@ export default function AdminTraffic() {
         <Stat label="Unique IPs" value={summary?.unique_ips ?? 0} />
       </div>
 
+      {/* Retention / storage note */}
+      <details className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+        <summary className="cursor-pointer font-medium text-slate-700">
+          🗄 Where is this data stored?
+        </summary>
+        <div className="mt-2 space-y-1">
+          <p>
+            Every login, page view, and worker punch writes a row into the
+            <code className="mx-1 rounded bg-white px-1">access_events</code> table.
+            The trigger <code>set_ip_before_insert</code> auto-fills the client
+            IP from the <code>x-forwarded-for</code> request header.
+          </p>
+          <p>
+            Anon clients can <em>insert</em> events but only supervisors and
+            admins can <em>read</em> them (RLS-enforced).
+          </p>
+          <p>
+            <strong>Retention:</strong> rows are kept indefinitely by default.
+            Run <code>select * from purge_old_access_events(p_keep_days := 90);</code>
+            from the SQL editor (or via a scheduled Edge Function) to age them
+            out — it returns <code>{`{deleted_count, kept_count}`}</code>.
+          </p>
+        </div>
+      </details>
+
       {/* Window picker */}
       <div className="flex flex-wrap items-center gap-1 text-xs">
         <span className="text-slate-500">Window:</span>

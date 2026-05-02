@@ -222,6 +222,60 @@ export default function SupervisorDashboard() {
   )
 }
 
+/**
+ * Renders the captured digital footprint as TWO separate collapsible
+ * sections so the supervisor can audit the image evidence and the device
+ * context independently (M17).
+ */
+function MetadataPanels({ metadata }: { metadata: Record<string, unknown> | null }) {
+  if (!metadata || Object.keys(metadata).length === 0) return null
+  const image  = (metadata as { image?: unknown }).image  ?? null
+  const camera = (metadata as { camera?: unknown }).camera ?? null
+  const device = (metadata as { device?: unknown }).device ?? null
+  // Anything we don't recognise (forwards-compat) falls into 'other'
+  const other: Record<string, unknown> = { ...metadata }
+  delete other.image
+  delete other.camera
+  delete other.device
+
+  const renderJson = (label: string, value: unknown, palette = 'bg-white') =>
+    value && Object.keys(value as object).length > 0 ? (
+      <details className="mt-2">
+        <summary className="cursor-pointer text-slate-600">{label}</summary>
+        <pre className={`mt-1 max-h-48 overflow-auto rounded ${palette} p-2 text-[10px] text-slate-700`}>
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      </details>
+    ) : null
+
+  return (
+    <>
+      {(image || camera) && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-slate-600">
+            🖼 Image metadata (selfie + camera track)
+          </summary>
+          <div className="mt-1 rounded bg-white p-2 text-[10px] text-slate-700">
+            {image  ? renderJson('Image', image, 'bg-slate-50')  : null}
+            {camera ? renderJson('Camera track', camera, 'bg-slate-50') : null}
+          </div>
+        </details>
+      )}
+      {device && Object.keys(device as object).length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-slate-600">
+            💻 Device metadata (browser + screen + timezone + WebGL + network)
+          </summary>
+          <pre className="mt-1 max-h-72 overflow-auto rounded bg-white p-2 text-[10px] text-slate-700">
+            {JSON.stringify(device, null, 2)}
+          </pre>
+        </details>
+      )}
+      {Object.keys(other).length > 0 && renderJson('Other', other)}
+    </>
+  )
+}
+
 function Row({
   row, compact, checked, expanded,
   onToggle, onExpand, onSelfieClick, onVerify, onReject,
@@ -363,16 +417,7 @@ function Row({
             )}
           </dl>
 
-          {row.selfie_metadata && Object.keys(row.selfie_metadata).length > 0 && (
-            <details className="mt-2">
-              <summary className="cursor-pointer text-slate-600">
-                Image metadata (selfie_metadata)
-              </summary>
-              <pre className="mt-1 max-h-40 overflow-auto rounded bg-white p-2 text-[10px] text-slate-700">
-                {JSON.stringify(row.selfie_metadata, null, 2)}
-              </pre>
-            </details>
-          )}
+          <MetadataPanels metadata={row.selfie_metadata} />
         </div>
       )}
     </li>

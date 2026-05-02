@@ -258,14 +258,36 @@ export default function SupervisorEditPunch() {
           <dt className="text-slate-500">Briefing ack'd</dt>
           <dd>{row.briefing_acknowledged_id ? '✓' : '—'}</dd>
         </dl>
-        {row.selfie_metadata && Object.keys(row.selfie_metadata).length > 0 && (
-          <details className="mt-2">
-            <summary className="cursor-pointer text-slate-600">Image metadata (selfie_metadata)</summary>
-            <pre className="mt-1 max-h-40 overflow-auto rounded bg-slate-50 p-2 text-[10px] text-slate-700">
-              {JSON.stringify(row.selfie_metadata, null, 2)}
-            </pre>
-          </details>
-        )}
+        {row.selfie_metadata && (() => {
+          const meta = row.selfie_metadata as Record<string, unknown>
+          const image  = meta.image  ?? null
+          const camera = meta.camera ?? null
+          const device = meta.device ?? null
+          return (
+            <>
+              {(image || camera) && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-slate-600">
+                    🖼 Image metadata (selfie + camera track)
+                  </summary>
+                  <pre className="mt-1 max-h-56 overflow-auto rounded bg-slate-50 p-2 text-[10px] text-slate-700">
+                    {JSON.stringify({ image, camera }, null, 2)}
+                  </pre>
+                </details>
+              )}
+              {device && Object.keys(device as object).length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-slate-600">
+                    💻 Device metadata (browser + screen + timezone + WebGL + network)
+                  </summary>
+                  <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-[10px] text-slate-700">
+                    {JSON.stringify(device, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
