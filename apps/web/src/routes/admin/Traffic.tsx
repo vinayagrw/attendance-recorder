@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
+import { APP_CONFIG } from '@/config/app'
 
 type EventTypeFilter = '' | 'page_view' | 'login' | 'login_fail' | 'logout' | 'register' | 'pin_request'
 type ActorTypeFilter = '' | 'worker' | 'supervisor' | 'admin' | 'anon'
@@ -59,7 +60,7 @@ export default function AdminTraffic() {
         unknown_traffic: 0, unique_ips: 0, unique_fingerprints: 0,
       }
     },
-    refetchInterval: 30_000,
+    refetchInterval: APP_CONFIG.TRAFFIC_REFETCH_MS,
   })
 
   const { data: rows, isPending } = useQuery({
@@ -74,7 +75,7 @@ export default function AdminTraffic() {
       if (error) throw error
       return (data as TrafficRow[]) ?? []
     },
-    refetchInterval: 30_000,
+    refetchInterval: APP_CONFIG.TRAFFIC_REFETCH_MS,
   })
 
   const filtered = (rows ?? []).filter((r) => {

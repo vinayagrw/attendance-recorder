@@ -3,6 +3,7 @@
 // the selfie, inserts the attendance row.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
+import { ATTENDANCE_CONFIG } from '../_shared/config.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? Deno.env.get('SB_URL') ?? ''
 const SERVICE_KEY =
@@ -23,12 +24,17 @@ interface PunchBody {
   acknowledgedBriefingId?: string | null
 }
 
-// GPS accuracy threshold: only flag if uncertainty radius > 100 m. Construction
-// sites with metal / concrete routinely produce 30–80 m accuracy even when the
-// worker is physically on site, so 80 was too tight (caused false positives).
-const MAX_GPS_ACCURACY_M = 100
-const DRIVING_THRESHOLD_MS = 8 / 3.6
-const IMPLAUSIBLE_SPEED_MS = 33
+// All anomaly thresholds are pulled from `_shared/config.ts`, which reads
+// `ATT_*` env vars with sensible defaults. See that file for tuning notes.
+const {
+  MAX_GPS_ACCURACY_M,
+  DRIVING_THRESHOLD_MS,
+  IMPLAUSIBLE_SPEED_MS,
+  GEOFENCE_FAR_THRESHOLD_M,
+  BUDDY_PUNCH_WINDOW_HRS,
+  SELFIES_BUCKET,
+  EMIT_PUNCH_ACCESS_EVENT,
+} = ATTENDANCE_CONFIG
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return cors(new Response(null, { status: 204 }))
@@ -89,7 +95,7 @@ Deno.serve(async (req) => {
     ) flags.push('mock_gps_signature')
   }
 
-  const sinceIso = new Date(Date.now() - 12 * 3600_000).toISOString()
+  const sinceIso = new Date(Date.now() - BUDDY_PUNCH_WINDOW_HRS * 3600_000).toISOString()
   const { data: buddyHits } = await sb
     .from('attendance')
     .select('worker_id')
@@ -105,7 +111,11 @@ Deno.serve(async (req) => {
     p_lng: body.gps.lng,
   })
   const distance = (distRow as unknown as number | null) ?? null
-  if (distance != null && distance > 30 && distance > (body.gps.accuracy_m ?? 0)) {
+  if (
+    distance != null &&
+    distance > GEOFENCE_FAR_THRESHOLD_M &&
+    distance > (body.gps.accuracy_m ?? 0)
+  ) {
     flags.push('geofence_far')
   }
 
@@ -121,7 +131,7 @@ Deno.serve(async (req) => {
 
   const path = `${worker.id}/${body.type}-${Date.now()}.jpg`
   const blob = dataUrlToBlob(body.selfieDataUrl)
-  await sb.storage.from('selfies').upload(path, blob, { contentType: 'image/jpeg' })
+  await sb.storage.from(SELFIES_BUCKET).upload(path, blob, { contentType: 'image/jpeg' })
 
   const insert: Record<string, unknown> = {
     worker_id: worker.id,
@@ -171,8 +181,9 @@ Deno.serve(async (req) => {
     },
   })
 
-  // also fire a 'login'-style traffic event so /admin/traffic captures the punch
-  await sb.from('access_events').insert({
+  // also fire a traffic event so /admin/traffic captures the punch — opt-out
+  // via ATT_EMIT_PUNCH_ACCESS_EVENT=false if access_events grow too quickly.
+  if (EMIT_PUNCH_ACCESS_EVENT) await sb.from('access_events').insert({
     actor_type: 'worker',
     actor_id: worker.id,
     event_type: 'page_view',

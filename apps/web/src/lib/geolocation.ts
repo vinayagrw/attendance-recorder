@@ -1,3 +1,5 @@
+import { APP_CONFIG } from '@/config/app'
+
 export interface PunchLocation {
   lat: number
   lng: number
@@ -8,7 +10,9 @@ export interface PunchLocation {
 
 const DEFAULT_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
-  timeout: 12_000,
+  // Allow a small grace period above the configured GPS_TIMEOUT_MS so a slow
+  // first fix doesn't immediately fail.
+  timeout: APP_CONFIG.GPS_TIMEOUT_MS + 2_000,
   maximumAge: 0,
 }
 

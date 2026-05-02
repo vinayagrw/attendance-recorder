@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { APP_CONFIG } from '@/config/app'
 
 export function useFeatureFlag(key: string) {
   const { data: flag, isPending } = useQuery({
@@ -13,7 +14,7 @@ export function useFeatureFlag(key: string) {
       if (error) throw error
       return data?.enabled ?? false
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: APP_CONFIG.FEATURE_FLAG_TTL_MS,
   })
 
   return {
@@ -40,7 +41,7 @@ export function useAllFeatureFlags() {
         }>
       ) ?? []
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: APP_CONFIG.FEATURE_FLAG_TTL_MS,
   })
 
   return {

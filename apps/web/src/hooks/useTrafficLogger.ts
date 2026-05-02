@@ -11,6 +11,7 @@ import { useSession } from './useSession'
 import { useSupervisor } from './useSupervisor'
 import { useWorker } from './useWorker'
 import { logAccess, type AccessActorType } from '@/lib/trafficLog'
+import { APP_CONFIG } from '@/config/app'
 
 export function useTrafficLogger() {
   const location = useLocation()
@@ -52,7 +53,7 @@ export function useTrafficLogger() {
         actorLabel,
         route: path,
       })
-    }, 250)
+    }, APP_CONFIG.TRAFFIC_LOGGER_DEBOUNCE_MS)
     return () => window.clearTimeout(t)
   }, [location.pathname, location.search, session, supervisor, worker])
 }

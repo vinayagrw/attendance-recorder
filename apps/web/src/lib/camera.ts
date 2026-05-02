@@ -1,3 +1,5 @@
+import { APP_CONFIG } from '@/config/app'
+
 export interface CapturedSelfie {
   blob: Blob
   dataUrl: string
@@ -76,7 +78,7 @@ export async function startSelfieStream(
       video.addEventListener('loadeddata', onReady, { once: true })
       video.addEventListener('canplay', onReady, { once: true })
       // Hard timeout so we don't hang forever on a stuck device
-      setTimeout(onReady, 3_000)
+      setTimeout(onReady, APP_CONFIG.CAMERA_READY_TIMEOUT_MS)
     })
   }
   return stream
@@ -89,8 +91,8 @@ export function stopStream(stream: MediaStream | null) {
 export async function captureSelfie(
   video: HTMLVideoElement,
   watermark?: { timestamp: string; lat?: number; lng?: number },
-  maxLongEdgePx = 800,
-  jpegQuality = 0.7,
+  maxLongEdgePx: number = APP_CONFIG.SELFIE_MAX_LONG_EDGE_PX,
+  jpegQuality: number = APP_CONFIG.SELFIE_JPEG_QUALITY,
 ): Promise<CapturedSelfie> {
   const t0 = performance.now()
   const trackInfo = readTrackInfo(video)

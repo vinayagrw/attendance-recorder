@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { APP_CONFIG } from '@/config/app'
 
 export interface AttendanceRow {
   id: string
@@ -48,7 +49,7 @@ export function useTodayAttendance() {
       if (error) throw error
       return (data as unknown as AttendanceRow[]) ?? []
     },
-    refetchInterval: 30_000,
+    refetchInterval: APP_CONFIG.ATTENDANCE_REFETCH_MS,
   })
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { useTodayAttendance, type AttendanceRow } from '@/hooks/useTodayAttendan
 import { useFeatureFlag } from '@/hooks/useFeatureFlag'
 import SelfieThumb from '@/components/SelfieThumb'
 import SelfieLightbox from '@/components/SelfieLightbox'
+import { APP_CONFIG } from '@/config/app'
 
 const SEVERITY: Record<string, number> = {
   not_live_camera: 3, impossible_speed: 3, mock_gps_signature: 3, buddy_punch_suspected: 3,
@@ -42,7 +43,7 @@ export default function SupervisorDashboard() {
         .eq('status', 'pending_approval')
       return count ?? 0
     },
-    refetchInterval: 60_000,
+    refetchInterval: APP_CONFIG.PENDING_APPROVALS_REFETCH_MS,
   })
 
   const verify = useMutation({
