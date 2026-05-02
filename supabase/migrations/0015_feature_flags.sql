@@ -2,7 +2,7 @@
 -- Allows orgs to control feature visibility
 
 create table if not exists feature_flags (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default uuid_generate_v4(),
     org_id uuid not null default '00000000-0000-0000-0000-000000000001'
         references organisations(id) on delete cascade,
     key text not null,
@@ -35,10 +35,9 @@ create policy "feature_flags_admin_write" on feature_flags
 
 -- Initialize default feature flags
 insert into feature_flags (org_id, key, name, description, enabled)
-values
+values 
     ('00000000-0000-0000-0000-000000000001', 'analytics_dashboard', 'Analytical Dashboard', 'View hours, charts, and worker analytics', false),
     ('00000000-0000-0000-0000-000000000001', 'advanced_filters', 'Advanced Filters', 'Use advanced filters in reports', true),
     ('00000000-0000-0000-0000-000000000001', 'daily_attendance_table', 'Daily Attendance Table', 'View daily attendance in tabular format', true),
     ('00000000-0000-0000-0000-000000000001', 'chart_exports', 'Chart Exports', 'Export charts as images', false)
 on conflict (org_id, key) do nothing;
-
