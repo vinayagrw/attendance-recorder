@@ -1,0 +1,28 @@
+# Cloudflare Pages config for the Attendance Recorder PWA.
+#
+# Why this file exists:
+#   `npx wrangler deploy` from the workspace root fails in wrangler 4.x with:
+#     ✘ The Wrangler application detection logic has been run in the root of
+#       a workspace instead of targeting a specific project. Change your
+#       working directory to one of the applications in the workspace …
+#   That's because this is a pnpm workspace and wrangler can't guess which
+#   sub-package to ship. `pages_build_output_dir` answers that question.
+#
+# What this tells wrangler:
+#   1. This is a Cloudflare Pages project (not a Worker — different deploy path).
+#   2. The static files to upload live at apps/web/dist/, which is where the
+#      Vite build at apps/web/ writes its output.
+#
+# Build command (set in the CF Pages dashboard → Settings → Builds, NOT here):
+#   pnpm install --frozen-lockfile && pnpm --filter @attendance/web build
+# That command runs first, produces apps/web/dist/, then wrangler uploads it.
+#
+# `name` is intentionally omitted: the CF Pages dashboard already owns the
+# project slug. Specifying it here would error on mismatch. If you ever want
+# to tie the slug to source control, add `name = "<slug>"` matching the
+# project's name in the dashboard.
+#
+# See docs/cloudflare_setup.md for the full deploy walk-through.
+
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "apps/web/dist"
