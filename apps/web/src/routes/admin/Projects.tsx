@@ -157,14 +157,17 @@ export default function AdminProjects() {
 
   return (
     <RoleScaffold title="Projects" backTo="/">
-      {/* Top action row — feature flags is intentionally NOT linked here.
-          Admins can still hit it directly at /admin/feature-flags. */}
+      {/* Top action row — every admin page is reachable from here. */}
       <div className="flex flex-wrap gap-2 mb-2">
         <button onClick={() => setShowForm((s) => !s)} className="btn-secondary">
           {showForm ? 'Cancel' : '+ New project'}
         </button>
         <Link to="/admin/traffic" className="btn-secondary">📡 Site traffic</Link>
         <Link to="/admin/audit" className="btn-secondary">🧾 Audit</Link>
+        <Link to="/admin/staff" className="btn-secondary">👥 Staff</Link>
+        <Link to="/admin/workers" className="btn-secondary">👷 Workers</Link>
+        <Link to="/admin/diagnostics" className="btn-secondary">🩺 Diagnostics</Link>
+        <Link to="/admin/feature-flags" className="btn-secondary">🚩 Feature flags</Link>
       </div>
 
       {/* Create form */}

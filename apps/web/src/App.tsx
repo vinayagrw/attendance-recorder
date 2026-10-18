@@ -29,6 +29,7 @@ import AdminWorkers from './routes/admin/Workers'
 import AdminAudit from './routes/admin/Audit'
 import AdminDiagnostics from './routes/admin/Diagnostics'
 import AdminTraffic from './routes/admin/Traffic'
+import AdminStaff from './routes/admin/Staff'
 import NotFound from './routes/NotFound'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -82,6 +83,7 @@ export default function App() {
          <Route path="diagnostics" element={<AdminDiagnostics />} />
          <Route path="feature-flags" element={<AdminFeatureFlags />} />
          <Route path="traffic" element={<AdminTraffic />} />
+         <Route path="staff" element={<AdminStaff />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
