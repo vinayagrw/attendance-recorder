@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import WorkerAssignments from '@/components/WorkerAssignments'
+import WorkerRates from '@/components/WorkerRates'
 
 interface Worker {
   id: string
@@ -18,6 +19,7 @@ interface Site { id: string; name: string }
 export default function AdminWorkers() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [ratesFor, setRatesFor] = useState<string | null>(null)
   const [form, setForm] = useState({ full_name: '', phone: '', site_id: '' })
 
   const { data: workers, isPending } = useQuery({
@@ -162,6 +164,8 @@ export default function AdminWorkers() {
                 <button onClick={() => setStatus.mutate({ id: w.id, status: 'active' })}
                   className="rounded-md bg-green-600 px-2 py-1 text-white">Reactivate</button>
               )}
+              <button onClick={() => setRatesFor(ratesFor === w.id ? null : w.id)}
+                className="rounded-md bg-emerald-100 px-2 py-1 text-emerald-900">💰 Rate</button>
               <button onClick={() => resetLockout.mutate(w.id)}
                 className="rounded-md bg-slate-200 px-2 py-1">Reset lockout</button>
               <button onClick={() => resetPin(w.id, w.full_name)}
@@ -172,6 +176,7 @@ export default function AdminWorkers() {
                 }} className="rounded-md bg-red-600 px-2 py-1 text-white">Offboard</button>
               )}
             </div>
+            {ratesFor === w.id && <div className="mt-2"><WorkerRates workerId={w.id} /></div>}
           </li>
         ))}
       </ul>

@@ -153,6 +153,10 @@ export default function SupervisorDashboard() {
           className="rounded-xl bg-amber-50 p-3 text-center text-sm text-amber-900 hover:bg-amber-100">
           🔑 PIN resets
         </Link>
+        <Link to="/supervisor/pay-rates"
+          className="col-span-2 rounded-xl bg-emerald-50 p-3 text-center text-sm text-emerald-900 hover:bg-emerald-100">
+          💰 Pay rates
+        </Link>
         <Link to="/supervisor/daily-reports-list"
           className="col-span-2 rounded-xl bg-slate-100 p-3 text-center text-sm text-slate-800 hover:bg-slate-200">
           📋 Browse daily reports

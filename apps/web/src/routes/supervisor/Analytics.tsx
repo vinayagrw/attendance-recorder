@@ -8,9 +8,11 @@ import {
   useAnalyticsHoursPerWorkerProject,
   useAnalyticsWorkerCountPerProject,
   useAnalyticsDailyAttendance,
+  useAnalyticsPay,
   useAttendanceFilterOptions,
   type AnalyticsFilters,
 } from '@/hooks/useAnalytics'
+import PaySummary, { inr } from '@/components/PaySummary'
 import { logger } from '@/lib/logger'
 
 function todayIso() {
@@ -93,8 +95,14 @@ export default function Analytics() {
     error: dailyAttendanceError,
   } = useAnalyticsDailyAttendance(dailyFilters, dailyTableEnabled)
 
+  const {
+    data: payRows = [],
+    isPending: payLoading,
+    error: payError,
+  } = useAnalyticsPay(hoursFilters, flagEnabled)
+
   const errors = [
-    hoursPerProjectError, hoursPerWorkerError, workerCountsError, dailyAttendanceError,
+    hoursPerProjectError, hoursPerWorkerError, workerCountsError, dailyAttendanceError, payError,
   ].filter(Boolean)
   errors.forEach((error) => {
     logger.error(error as Error, { module: 'Analytics', action: 'data_fetch' })
@@ -388,6 +396,9 @@ export default function Analytics() {
           </div>
         )}
 
+        {/* ── Pay ───────────────────────────────────────────────────────── */}
+        {flagEnabled && <PaySummary rows={payRows} loading={payLoading} />}
+
         {/* ── Daily attendance table ─────────────────────────────────────── */}
         {dailyTableEnabled && (
           <div className="rounded-xl bg-white shadow-sm overflow-hidden">
@@ -418,6 +429,8 @@ export default function Analytics() {
                       <th className="px-3 py-2 text-right font-semibold text-slate-700">In</th>
                       <th className="px-3 py-2 text-right font-semibold text-slate-700">Out</th>
                       <th className="px-3 py-2 text-right font-semibold text-slate-700">Hours</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700">Rate</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700">Amount</th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">Flags</th>
                     </tr>
@@ -430,13 +443,19 @@ export default function Analytics() {
                         <td className="px-3 py-2 text-slate-600">{row.project_name}</td>
                         <td className="px-3 py-2 text-slate-600">{row.site_name}</td>
                         <td className="px-3 py-2 text-right text-slate-700">
-                          {row.punch_in_time ?? '—'}
+                          {row.punch_in_time?.slice(0, 5) ?? '—'}
                         </td>
                         <td className={`px-3 py-2 text-right ${row.punch_out_time ? 'text-slate-700' : 'text-amber-700'}`}>
-                          {row.punch_out_time ?? 'open'}
+                          {row.punch_out_time?.slice(0, 5) ?? 'open'}
                         </td>
                         <td className={`px-3 py-2 text-right font-medium ${row.hours_worked == null ? 'text-amber-700' : 'text-slate-700'}`}>
                           {row.hours_worked == null ? '—' : Number(row.hours_worked).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {row.hourly_rate == null ? '—' : inr.format(Number(row.hourly_rate))}
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700">
+                          {row.amount == null ? '—' : inr.format(Number(row.amount))}
                         </td>
                         <td className="px-3 py-2">
                           <span

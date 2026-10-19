@@ -61,6 +61,21 @@ export interface DailyAttendance {
   hours_worked: number | null
   status: string
   flag_reasons: string[]
+  hourly_rate: number | null
+  amount: number | null
+}
+
+export interface PayRow {
+  work_date: string
+  project_id: string
+  project_name: string
+  site_id: string
+  site_name: string
+  worker_id: string
+  worker_name: string
+  hours: number
+  hourly_rate: number | null
+  amount: number | null
 }
 
 export interface FilterOptions {
@@ -159,6 +174,28 @@ export function useAnalyticsDailyAttendance(filters: AnalyticsFilters, enabled =
         throw error
       }
       return (data as DailyAttendance[]) ?? []
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+/** Closed shifts with the rate in effect on each work date (0024). */
+export function useAnalyticsPay(filters: AnalyticsFilters, enabled = true) {
+  const { startDate, endDate, projectId, siteId } = filters
+  return useQuery({
+    queryKey: ['analytics-pay', startDate, endDate, projectId, siteId],
+    enabled,
+    queryFn: async (): Promise<PayRow[]> => {
+      const { data, error } = await supabase.rpc('analytics_pay', {
+        ...rangeToTimestamps(startDate, endDate),
+        p_project_id: projectId ?? null,
+        p_site_id: siteId ?? null,
+      })
+      if (error) {
+        logger.error(error, { module: 'useAnalyticsPay' })
+        throw error
+      }
+      return (data as PayRow[]) ?? []
     },
     staleTime: 5 * 60 * 1000,
   })

@@ -101,10 +101,6 @@ export default function SupervisorLogin() {
           {form.formState.isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>
 
-        <p className="text-xs text-slate-400">
-          Local dev seed: <code>viagr@ciklum.com</code> / <code>LocalDev2026!</code> — change after
-          first login.
-        </p>
       </form>
     </RoleScaffold>
   )

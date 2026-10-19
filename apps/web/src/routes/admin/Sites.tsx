@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import SiteMapPreview from '@/components/SiteMapPreview'
+import { geocodeAddress } from '@/lib/geocode'
 
 // IANA timezones offered as autocomplete suggestions. Modern browsers
 // expose every Intl-known zone via supportedValuesOf; fall back to a
@@ -48,7 +49,7 @@ interface Site {
   timezone: string
 }
 
-interface Project { id: string; name: string }
+interface Project { id: string; name: string; address: string | null }
 
 export default function AdminSites() {
   const qc = useQueryClient()
@@ -63,6 +64,8 @@ export default function AdminSites() {
     radius: '150',
     timezone: 'Asia/Kolkata',
   })
+  const [address, setAddress] = useState('')
+  const [geo, setGeo] = useState<{ busy: boolean; msg: string; error: boolean }>({ busy: false, msg: '', error: false })
   const timezoneOptions = useMemo(() => listIanaTimezones(), [])
 
   // Pre-fill the project when the URL says so (deep-link from /admin/projects)
@@ -76,7 +79,7 @@ export default function AdminSites() {
   const { data: projects } = useQuery({
     queryKey: ['admin-projects-min'],
     queryFn: async (): Promise<Project[]> => {
-      const { data } = await supabase.from('projects').select('id, name').order('name')
+      const { data } = await supabase.from('projects').select('id, name, address').order('name')
       return (data as Project[]) ?? []
     },
   })
@@ -117,9 +120,28 @@ export default function AdminSites() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-sites'] })
       setShowForm(false)
+      setAddress('')
+      setGeo({ busy: false, msg: '', error: false })
       setForm({ name: '', project_id: '', lat: '', lng: '', radius: '150', timezone: 'Asia/Kolkata' })
     },
   })
+
+  // Fill lat/lng from the typed address, or the project's address if blank.
+  const findLocation = async () => {
+    const projectAddress = projects?.find((p) => p.id === form.project_id)?.address ?? ''
+    const query = address.trim() || projectAddress
+    if (!address.trim() && projectAddress) setAddress(projectAddress)
+    setGeo({ busy: true, msg: '', error: false })
+    try {
+      const r = await geocodeAddress(query)
+      setForm((f) => ({ ...f, lat: r.lat.toFixed(6), lng: r.lng.toFixed(6) }))
+      setGeo({ busy: false, msg: `Found: ${r.label}`, error: false })
+    } catch (e) {
+      setGeo({ busy: false, msg: (e as Error).message, error: true })
+    }
+  }
+  const previewLat = parseFloat(form.lat)
+  const previewLng = parseFloat(form.lng)
 
   const updateNote = useMutation({
     mutationFn: async ({ id, note }: { id: string; note: string }) => {
@@ -147,6 +169,14 @@ export default function AdminSites() {
           </select>
           <input className="input-field" placeholder="Site name" value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <div className="flex gap-2">
+            <input className="input-field flex-1" placeholder="Site address (blank = use project address)" value={address}
+              onChange={(e) => setAddress(e.target.value)} />
+            <button type="button" className="btn-secondary whitespace-nowrap" disabled={geo.busy} onClick={findLocation}>
+              {geo.busy ? 'Finding…' : '📍 Find location'}
+            </button>
+          </div>
+          {geo.msg && <div className={`text-xs ${geo.error ? 'text-red-700' : 'text-slate-500'}`}>{geo.msg}</div>}
           <div className="grid grid-cols-3 gap-2">
             <input className="input-field" placeholder="Lat" value={form.lat}
               onChange={(e) => setForm({ ...form, lat: e.target.value })} />
@@ -155,6 +185,9 @@ export default function AdminSites() {
             <input className="input-field" placeholder="Radius m" value={form.radius}
               onChange={(e) => setForm({ ...form, radius: e.target.value })} />
           </div>
+          {!isNaN(previewLat) && !isNaN(previewLng) && (
+            <SiteMapPreview lat={previewLat} lng={previewLng} radiusM={parseInt(form.radius, 10) || 150} height={180} />
+          )}
           <input
             className="input-field"
             placeholder="Timezone (IANA — e.g. Asia/Kolkata)"

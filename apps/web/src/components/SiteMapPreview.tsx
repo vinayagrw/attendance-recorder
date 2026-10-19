@@ -16,6 +16,7 @@ export default function SiteMapPreview({ lat, lng, radiusM, height = 200 }: Prop
   const ref = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const circleRef = useRef<L.Circle | null>(null)
+  const markerRef = useRef<L.Marker | null>(null)
 
   useEffect(() => {
     if (!ref.current) return
@@ -25,7 +26,7 @@ export default function SiteMapPreview({ lat, lng, radiusM, height = 200 }: Prop
       maxZoom: 19,
     }).addTo(map)
     const circle = L.circle([lat, lng], { radius: radiusM, color: '#0284c7', weight: 2 }).addTo(map)
-    L.marker([lat, lng]).addTo(map)
+    markerRef.current = L.marker([lat, lng]).addTo(map)
     mapRef.current = map
     circleRef.current = circle
     return () => {
@@ -40,6 +41,7 @@ export default function SiteMapPreview({ lat, lng, radiusM, height = 200 }: Prop
     if (!mapRef.current || !circleRef.current) return
     mapRef.current.setView([lat, lng], 17)
     circleRef.current.setLatLng([lat, lng]).setRadius(radiusM)
+    markerRef.current?.setLatLng([lat, lng])
   }, [lat, lng, radiusM])
 
   return <div ref={ref} className="rounded-xl overflow-hidden" style={{ height }} />
