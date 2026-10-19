@@ -5,6 +5,7 @@ import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import SelfieThumb from '@/components/SelfieThumb'
 import { logger } from '@/lib/logger'
+import { useUnits } from '@/hooks/useUnits'
 
 interface FilteredRow {
   id: string
@@ -339,6 +340,7 @@ export default function SupervisorReportsList() {
 }
 
 function PunchRow({ row }: { row: FilteredRow }) {
+  const units = useUnits()
   const dt = new Date(row.punched_at)
   return (
     <li className="rounded-xl bg-white p-2 shadow-sm">
@@ -356,7 +358,7 @@ function PunchRow({ row }: { row: FilteredRow }) {
           </div>
           <div className="truncate text-[11px] text-slate-400">
             {row.project_name} · {row.site_name}
-            {row.distance_from_site_m != null ? ` · ${row.distance_from_site_m.toFixed(0)} m` : ''}
+            {row.distance_from_site_m != null ? ` · ${units.formatDistance(row.distance_from_site_m)}` : ''}
           </div>
           {row.flag_reasons && row.flag_reasons.length > 0 && (
             <div className="mt-1 text-[11px] text-amber-700">⚠ {row.flag_reasons.join(', ')}</div>

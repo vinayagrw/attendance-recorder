@@ -5,6 +5,7 @@ import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import SiteMapPreview from '@/components/SiteMapPreview'
 import { geocodeAddress } from '@/lib/geocode'
+import { useUnits } from '@/hooks/useUnits'
 
 // IANA timezones offered as autocomplete suggestions. Modern browsers
 // expose every Intl-known zone via supportedValuesOf; fall back to a
@@ -61,9 +62,15 @@ export default function AdminSites() {
     project_id: projectIdFromUrl,
     lat: '',
     lng: '',
-    radius: '150',
+    radius: '',
     timezone: 'Asia/Kolkata',
   })
+  const units = useUnits()
+  // Radius is typed in the display unit; blank means the 150 m default.
+  const radiusMetres = () => {
+    const v = parseFloat(form.radius)
+    return isNaN(v) || v <= 0 ? 150 : Math.round(units.toMetres(v))
+  }
   const [address, setAddress] = useState('')
   const [geo, setGeo] = useState<{ busy: boolean; msg: string; error: boolean }>({ busy: false, msg: '', error: false })
   const timezoneOptions = useMemo(() => listIanaTimezones(), [])
@@ -99,7 +106,6 @@ export default function AdminSites() {
     mutationFn: async () => {
       const lat = parseFloat(form.lat)
       const lng = parseFloat(form.lng)
-      const radius = parseInt(form.radius, 10)
       if (!form.name.trim()) throw new Error('Name required')
       if (!form.project_id) throw new Error('Pick a project')
       if (isNaN(lat) || isNaN(lng)) throw new Error('Lat/lng required')
@@ -112,7 +118,7 @@ export default function AdminSites() {
         name: form.name.trim(),
         project_id: form.project_id,
         default_lat: lat, default_lng: lng,
-        default_radius_m: isNaN(radius) ? 150 : radius,
+        default_radius_m: radiusMetres(),
         timezone: form.timezone,
       })
       if (error) throw error
@@ -122,7 +128,7 @@ export default function AdminSites() {
       setShowForm(false)
       setAddress('')
       setGeo({ busy: false, msg: '', error: false })
-      setForm({ name: '', project_id: '', lat: '', lng: '', radius: '150', timezone: 'Asia/Kolkata' })
+      setForm({ name: '', project_id: '', lat: '', lng: '', radius: '', timezone: 'Asia/Kolkata' })
     },
   })
 
@@ -182,11 +188,11 @@ export default function AdminSites() {
               onChange={(e) => setForm({ ...form, lat: e.target.value })} />
             <input className="input-field" placeholder="Lng" value={form.lng}
               onChange={(e) => setForm({ ...form, lng: e.target.value })} />
-            <input className="input-field" placeholder="Radius m" value={form.radius}
+            <input className="input-field" placeholder={`Radius ${units.radiusUnit} (default ${units.fromMetres(150)})`} value={form.radius}
               onChange={(e) => setForm({ ...form, radius: e.target.value })} />
           </div>
           {!isNaN(previewLat) && !isNaN(previewLng) && (
-            <SiteMapPreview lat={previewLat} lng={previewLng} radiusM={parseInt(form.radius, 10) || 150} height={180} />
+            <SiteMapPreview lat={previewLat} lng={previewLng} radiusM={radiusMetres()} height={180} />
           )}
           <input
             className="input-field"
@@ -222,7 +228,7 @@ export default function AdminSites() {
               <span className="text-xs text-slate-400">{s.status}</span>
             </div>
             <div className="text-xs text-slate-500">
-              {s.default_lat?.toFixed(5)}, {s.default_lng?.toFixed(5)} · {s.default_radius_m} m · {s.timezone}
+              {s.default_lat?.toFixed(5)}, {s.default_lng?.toFixed(5)} · {units.formatDistance(s.default_radius_m)} radius · {s.timezone}
             </div>
             {s.default_lat != null && s.default_lng != null && (
               <div className="mt-2">

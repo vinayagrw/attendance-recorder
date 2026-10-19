@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useSupervisor } from '@/hooks/useSupervisor'
 import SelfieThumb from '@/components/SelfieThumb'
 import { logger } from '@/lib/logger'
+import { useUnits } from '@/hooks/useUnits'
 
 function localFromIso(iso: string): string {
   const d = new Date(iso)
@@ -43,6 +44,7 @@ interface PunchDetail {
 }
 
 export default function SupervisorEditPunch() {
+  const units = useUnits()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -242,11 +244,11 @@ export default function SupervisorEditPunch() {
             {row.device_lat?.toFixed(5) ?? '—'}, {row.device_lng?.toFixed(5) ?? '—'}
           </dd>
           <dt className="text-slate-500">GPS accuracy</dt>
-          <dd>{row.gps_accuracy_m?.toFixed(0) ?? '—'} m</dd>
+          <dd>{units.formatDistance(row.gps_accuracy_m)}</dd>
           <dt className="text-slate-500">Distance from site</dt>
-          <dd>{row.distance_from_site_m?.toFixed(0) ?? '—'} m</dd>
+          <dd>{units.formatDistance(row.distance_from_site_m)}</dd>
           <dt className="text-slate-500">Speed</dt>
-          <dd>{row.speed_ms != null ? `${(row.speed_ms * 3.6).toFixed(1)} km/h` : '—'}</dd>
+          <dd>{units.formatSpeed(row.speed_ms)}</dd>
           <dt className="text-slate-500">Capture method</dt>
           <dd>{row.capture_method ?? '—'}</dd>
           <dt className="text-slate-500">Device fingerprint</dt>

@@ -11,6 +11,7 @@ import { getDeviceInfo } from '@/lib/deviceFingerprint'
 import { getDigitalFootprintJSON } from '@/lib/digitalFootprint'
 import { drainQueue, enqueuePunch, queueLength } from '@/lib/offlineQueue'
 import { logger } from '@/lib/logger'
+import { useUnits } from '@/hooks/useUnits'
 
 interface PunchPayload {
   siteId: string
@@ -27,6 +28,7 @@ interface PunchPayload {
 }
 
 export default function WorkerPunch() {
+  const units = useUnits()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { worker, sites, loading } = useWorker()
@@ -375,11 +377,11 @@ export default function WorkerPunch() {
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Accuracy</span>
-          <span className="font-mono">{gps ? `${gps.accuracyMeters.toFixed(0)} m` : '—'}</span>
+          <span className="font-mono">{gps ? units.formatDistance(gps.accuracyMeters) : '—'}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Distance to site</span>
-          <span className="font-mono">{distanceM != null ? `${distanceM.toFixed(0)} m` : '—'}</span>
+          <span className="font-mono">{units.formatDistance(distanceM)}</span>
         </div>
       </div>
 

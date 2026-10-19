@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import { useWorker } from '@/hooks/useWorker'
+import { useUnits } from '@/hooks/useUnits'
 
 const STATUS_BADGE: Record<string, string> = {
   verified: 'bg-green-100 text-green-800',
@@ -12,6 +13,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 export default function WorkerHistory() {
+  const units = useUnits()
   const { worker } = useWorker()
 
   const { data, isPending } = useQuery({
@@ -57,7 +59,7 @@ export default function WorkerHistory() {
                 <span className="font-semibold uppercase">{row.type}</span>
                 <span className="text-slate-500">
                   {row.distance_from_site_m != null
-                    ? `${row.distance_from_site_m.toFixed(0)} m from site`
+                    ? `${units.formatDistance(row.distance_from_site_m)} from site`
                     : ''}
                 </span>
               </div>

@@ -4,12 +4,28 @@ import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import { useAllFeatureFlags } from '@/hooks/useFeatureFlag'
 import { logger } from '@/lib/logger'
+import { useUnits, type UnitSystem } from '@/hooks/useUnits'
 
 export default function AdminFeatureFlags() {
   const qc = useQueryClient()
   const { flags, loading } = useAllFeatureFlags()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const { system } = useUnits()
+
+  const setUnits = useMutation({
+    mutationFn: async (next: UnitSystem) => {
+      const { error: err } = await supabase.rpc('set_unit_system', { p_unit_system: next })
+      if (err) throw err
+      return next
+    },
+    onSuccess: (next) => {
+      qc.setQueryData(['unit-system'], next)
+      setError(null)
+      setSuccess(`Distances now shown in ${next === 'imperial' ? 'miles' : 'metres and kilometres'}`)
+    },
+    onError: (e) => setError((e as Error).message),
+  })
 
   const toggleFlag = useMutation({
     mutationFn: async (key: string) => {
@@ -42,6 +58,25 @@ export default function AdminFeatureFlags() {
       <p className="mb-4 text-sm text-slate-600">
         Control feature visibility and gradual rollouts. Changes take effect immediately.
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-3 shadow-sm">
+        <div>
+          <div className="text-sm font-semibold text-slate-800">📏 Display units</div>
+          <div className="text-xs text-slate-500">Applies to everyone. Stored values stay in metres.</div>
+        </div>
+        <div className="flex gap-1">
+          {(['metric', 'imperial'] as const).map((u) => (
+            <button
+              key={u}
+              disabled={setUnits.isPending}
+              onClick={() => system !== u && setUnits.mutate(u)}
+              className={`rounded-full px-3 py-1 text-sm font-medium ${system === u ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}
+            >
+              {u === 'metric' ? 'Metric (m, km)' : 'Imperial (mi)'}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>

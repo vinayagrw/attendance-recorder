@@ -10,6 +10,7 @@ import { useFeatureFlag } from '@/hooks/useFeatureFlag'
 import SelfieThumb from '@/components/SelfieThumb'
 import SelfieLightbox from '@/components/SelfieLightbox'
 import { APP_CONFIG } from '@/config/app'
+import { useUnits } from '@/hooks/useUnits'
 
 const SEVERITY: Record<string, number> = {
   not_live_camera: 3, impossible_speed: 3, mock_gps_signature: 3, buddy_punch_suspected: 3,
@@ -294,6 +295,7 @@ function Row({
   onVerify?: () => void
   onReject?: () => void
 }) {
+  const units = useUnits()
   const dt = new Date(row.punched_at)
   const sev = sevOf(row.flag_reasons)
   return (
@@ -334,7 +336,7 @@ function Row({
           )}
           {row.distance_from_site_m != null && (
             <div className="mt-1 text-xs text-slate-400">
-              {row.distance_from_site_m.toFixed(0)} m from site
+              {units.formatDistance(row.distance_from_site_m)} from site
             </div>
           )}
         </div>
@@ -394,11 +396,11 @@ function Row({
             </dd>
 
             <dt className="text-slate-500">GPS accuracy</dt>
-            <dd>{row.gps_accuracy_m?.toFixed(0) ?? '—'} m</dd>
+            <dd>{units.formatDistance(row.gps_accuracy_m)}</dd>
 
             <dt className="text-slate-500">Speed</dt>
             <dd>
-              {row.speed_ms != null ? `${(row.speed_ms * 3.6).toFixed(1)} km/h` : '—'}
+              {units.formatSpeed(row.speed_ms)}
             </dd>
 
             <dt className="text-slate-500">Capture method</dt>
