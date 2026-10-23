@@ -27,16 +27,17 @@ if [ "$confirm" != "yes" ]; then
     exit 0
 fi
 # Set your connection details
-DB_PASS="Rokcy@78717"
-DB_CMD="psql -h aws-1-us-east-2.pooler.supabase.com -p 6543 -d postgres -U postgres.gryuohugoausgomeosdr"
+DB_CMD="psql postgresql://postgres.gryuohugoausgomeosdr:Rokcy%4078717@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
 
-# Helper function to run psql using docker (since psql might not be installed locally)
+# Helper function to run psql directly or via Docker
 run_psql() {
     if docker ps 2>/dev/null | grep -q "supabase_db_"; then
         DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep "supabase_db_" | head -n 1)
-        docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" $DB_CMD "$@"
+        docker exec -i "$DB_CONTAINER" $DB_CMD "$@"
+    elif command -v docker >/dev/null 2>&1; then
+        docker run --rm -i postgres:15-alpine $DB_CMD "$@"
     else
-        docker run --rm -i -e PGPASSWORD="$DB_PASS" postgres:15-alpine $DB_CMD "$@"
+        $DB_CMD "$@"
     fi
 }
 
@@ -75,6 +76,39 @@ test_case() {
         FAIL=$((FAIL + 1))
     fi
 }
+
+hard_cleanup_db() {
+    echo -e "${YELLOW}Running script-specific cleanup...${RESET}"
+    run_psql -c "
+        delete from attendance;
+        delete from device_logs;
+        update workers set status='invited',
+            pin_hash=null, baseline_selfie_url=null, auth_user_id=null,
+            registered_at=null, approved_at=null, approved_by=null;
+        delete from auth.users where email like '%@worker.local';
+        delete from pin_reset_requests;
+        delete from access_events where actor_label is null and (user_agent like 'e2e%' or user_agent is null);
+        delete from sites where name in ('E2E legacy bad tz', 'E2E NY site');
+        delete from projects where name = 'E2E throwaway tz project';
+    "
+    echo "  Cleanup finished."
+}
+
+reset_db() {
+    run_psql -c "
+        update workers set status='invited',
+            pin_hash=null, baseline_selfie_url=null, auth_user_id=null,
+            registered_at=null, approved_at=null, approved_by=null;
+        delete from auth.users where email like '%@worker.local';
+        delete from pin_reset_requests;
+        delete from access_events where actor_label is null and (user_agent like 'e2e%' or user_agent is null);
+    " > /dev/null 2>&1
+}
+
+if [ "$1" == "--cleanup" ]; then
+    hard_cleanup_db
+    exit 0
+fi
 
 echo -e "${YELLOW}=== Phase 1: Anonymous pick-list ===${RESET}"
 
@@ -825,15 +859,7 @@ curl -s -X DELETE "$API_URL/rest/v1/projects?id=eq.$TZ_PROJ_ID" \
 echo ""
 echo -e "${YELLOW}=== Phase 43: Final cleanup (reset state for clean re-runs) ===${RESET}"
 
-run_psql -c "
-    update workers set status='invited',
-        pin_hash=null, baseline_selfie_url=null, auth_user_id=null,
-        registered_at=null, approved_at=null, approved_by=null;
-    delete from auth.users where email like '%@worker.local';
-    delete from pin_reset_requests;
-    delete from access_events where actor_label is null and (user_agent like 'e2e%' or user_agent is null);
-" > /dev/null 2>&1
-echo "  reset complete"
+reset_db
 
 echo ""
 echo "================================================"
