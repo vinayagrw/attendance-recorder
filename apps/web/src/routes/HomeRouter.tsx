@@ -26,7 +26,21 @@ export default function HomeRouter() {
         </Link>
       </div>
 
-      <p className="mt-4 text-xs text-slate-400">v0 · scaffold · M0</p>
+      <a
+        href="mailto:vinayagrw@gmail.com"
+        className="group mt-4 rounded-2xl bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400 p-[1px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      >
+        <span className="flex items-center gap-3 rounded-2xl bg-white px-4 py-2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 text-indigo-500 transition group-hover:rotate-[-8deg]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 7 9 6 9-6" />
+          </svg>
+          <span className="text-left leading-tight">
+            <span className="block text-xs text-slate-500">Built by Vinay · say hello</span>
+            <span className="block text-sm font-medium text-slate-800">vinayagrw@gmail.com</span>
+          </span>
+        </span>
+      </a>
     </div>
   )
 }

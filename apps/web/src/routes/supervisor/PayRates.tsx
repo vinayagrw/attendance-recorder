@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import RoleScaffold from '../_RoleScaffold'
 import { supabase } from '@/lib/supabase'
 import WorkerRates, { todayIso } from '@/components/WorkerRates'
-import { inr } from '@/components/PaySummary'
+import { usd } from '@/components/PaySummary'
 
 interface Worker { id: string; full_name: string; status: string }
 interface RateRow { worker_id: string; hourly_rate: number; effective_from: string }
@@ -65,7 +65,7 @@ export default function SupervisorPayRates() {
               onClick={() => setOpenId(openId === w.id ? null : w.id)}>
               <span className="font-semibold">{w.full_name}</span>
               <span className={`text-sm ${current.has(w.id) ? 'text-slate-700' : 'text-amber-700'}`}>
-                {current.has(w.id) ? `${inr.format(current.get(w.id)!)}/hr` : 'No rate'} {openId === w.id ? '▲' : '▼'}
+                {current.has(w.id) ? `${usd.format(current.get(w.id)!)}/hr` : 'No rate'} {openId === w.id ? '▲' : '▼'}
               </span>
             </button>
             {openId === w.id && <div className="mt-2"><WorkerRates workerId={w.id} /></div>}

@@ -12,7 +12,7 @@ import {
   useAttendanceFilterOptions,
   type AnalyticsFilters,
 } from '@/hooks/useAnalytics'
-import PaySummary, { inr } from '@/components/PaySummary'
+import PaySummary, { usd } from '@/components/PaySummary'
 import { logger } from '@/lib/logger'
 
 function todayIso() {
@@ -452,10 +452,10 @@ export default function Analytics() {
                           {row.hours_worked == null ? '—' : Number(row.hours_worked).toFixed(2)}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
-                          {row.hourly_rate == null ? '—' : inr.format(Number(row.hourly_rate))}
+                          {row.hourly_rate == null ? '—' : usd.format(Number(row.hourly_rate))}
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">
-                          {row.amount == null ? '—' : inr.format(Number(row.amount))}
+                          {row.amount == null ? '—' : usd.format(Number(row.amount))}
                         </td>
                         <td className="px-3 py-2">
                           <span

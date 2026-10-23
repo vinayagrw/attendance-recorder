@@ -47,6 +47,14 @@ export default function AdminTraffic() {
   const [search, setSearch] = useState('')
   const [unknownOnly, setUnknownOnly] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [limit, setLimit] = useState(500)
+  const [view, setViewState] = useState<'table' | 'cards'>(() => {
+    try { return localStorage.getItem('traffic-view') === 'cards' ? 'cards' : 'table' } catch { return 'table' }
+  })
+  const setView = (v: 'table' | 'cards') => {
+    setViewState(v)
+    try { localStorage.setItem('traffic-view', v) } catch { /* ignore */ }
+  }
 
   const since = useMemo(() => new Date(Date.now() - windowH * 3600_000).toISOString(), [windowH])
 
@@ -64,10 +72,10 @@ export default function AdminTraffic() {
   })
 
   const { data: rows, isPending } = useQuery({
-    queryKey: ['traffic', windowH, eventType, actorType],
+    queryKey: ['traffic', windowH, eventType, actorType, limit],
     queryFn: async (): Promise<TrafficRow[]> => {
       const { data, error } = await supabase.rpc('list_recent_traffic', {
-        p_limit: 500,
+        p_limit: limit,
         p_event_type: eventType || null,
         p_actor_type: actorType || null,
         p_since: since,
@@ -194,8 +202,30 @@ export default function AdminTraffic() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex gap-1">
+          {(['table', 'cards'] as const).map((v) => (
+            <button key={v} type="button" onClick={() => setView(v)}
+              className={`rounded-full px-3 py-1 font-medium ${view === v ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
+              {v === 'table' ? 'Table' : 'Cards'}
+            </button>
+          ))}
+        </div>
+        <select className="input-field w-auto py-1 text-xs" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+          <option value={500}>Latest 500</option>
+          <option value={2000}>Latest 2000</option>
+        </select>
+        <button type="button" className="btn-secondary py-1 text-xs" disabled={!filtered.length}
+          onClick={() => downloadCsv(filtered)}>
+          ⬇ Download CSV
+        </button>
+      </div>
+
       {/* Event list */}
       {isPending && <p className="text-slate-500">Loading…</p>}
+      {view === 'table' ? (
+        <TrafficTable rows={filtered} expandedId={expandedId} onToggle={(id) => setExpandedId(expandedId === id ? null : id)} />
+      ) : (
       <ul className="flex flex-col gap-2">
         {filtered.map((r) => (
           <TrafficCard
@@ -206,6 +236,7 @@ export default function AdminTraffic() {
           />
         ))}
       </ul>
+      )}
     </RoleScaffold>
   )
 }
@@ -306,5 +337,81 @@ function TrafficCard({
         </div>
       )}
     </li>
+  )
+}
+
+function metaOf(r: TrafficRow) {
+  const meta = (r.metadata ?? {}) as Record<string, unknown>
+  const screen = meta.screen as { width?: number; height?: number } | undefined
+  const conn = meta.connection as { effectiveType?: string; downlinkMbps?: number } | undefined
+  return {
+    meta,
+    timezone: (meta.timezone as string | undefined) ?? '',
+    language: (meta.language as string | undefined) ?? '',
+    platform: (meta.platform as string | undefined) ?? '',
+    screen: screen?.width ? `${screen.width}×${screen.height}` : '',
+    connection: conn?.effectiveType ? `${conn.effectiveType}${conn.downlinkMbps ? ` ${conn.downlinkMbps}Mbps` : ''}` : '',
+  }
+}
+
+const COLUMNS = ['Time', 'Event', 'Actor', 'Actor type', 'Known', 'Route', 'IP', 'Timezone', 'Language',
+  'Platform', 'Screen', 'Connection', 'Referrer', 'Fingerprint', 'User agent', 'Metadata']
+
+function rowValues(r: TrafficRow): string[] {
+  const m = metaOf(r)
+  return [
+    new Date(r.occurred_at).toLocaleString(), r.event_type, r.actor_label ?? 'unknown', r.actor_type,
+    r.is_known ? 'yes' : 'no', r.route ?? '', r.ip_address ?? '', m.timezone, m.language, m.platform,
+    m.screen, m.connection, r.referrer ?? '', r.device_fingerprint ?? '', r.user_agent ?? '',
+    Object.keys(m.meta).length ? JSON.stringify(m.meta) : '',
+  ]
+}
+
+function downloadCsv(rows: TrafficRow[]) {
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const lines = [COLUMNS, ...rows.map(rowValues)]
+    .map((cols) => cols.map(esc).join(','))
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `traffic-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+function TrafficTable({
+  rows, expandedId, onToggle,
+}: { rows: TrafficRow[]; expandedId: string | null; onToggle: (id: string) => void }) {
+  return (
+    <div className="max-h-[70vh] overflow-auto rounded-xl bg-white shadow-sm">
+      <table className="min-w-max text-left text-xs">
+        <thead className="sticky top-0 bg-slate-100 text-slate-600">
+          <tr>{COLUMNS.map((c) => <th key={c} className="whitespace-nowrap px-2 py-2 font-semibold">{c}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const v = rowValues(r)
+            const open = expandedId === r.id
+            return (
+              <tr key={r.id} onClick={() => onToggle(r.id)}
+                className={`cursor-pointer border-t border-slate-100 align-top hover:bg-slate-50 ${!r.is_known ? 'bg-amber-50/50' : ''}`}>
+                {v.map((cell, i) => (
+                  <td key={i} className={`px-2 py-1.5 ${i === 1 ? '' : 'text-slate-700'} ${i >= 12 ? 'font-mono' : ''}`}>
+                    {i === 1 ? (
+                      <span className={`rounded-full px-2 py-0.5 ${eventBadge(cell)}`}>{cell}</span>
+                    ) : i === 15 && open && cell ? (
+                      <pre className="max-w-md whitespace-pre-wrap break-all text-[10px]">{JSON.stringify(r.metadata, null, 2)}</pre>
+                    ) : (
+                      <span className={`block ${open ? 'max-w-md whitespace-pre-wrap break-all' : 'max-w-[16rem] truncate'}`} title={cell}>{cell || '—'}</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {!rows.length && <p className="p-3 text-slate-500">No events.</p>}
+    </div>
   )
 }

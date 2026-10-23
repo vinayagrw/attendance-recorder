@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { PayRow } from '@/hooks/useAnalytics'
 
-export const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
+export const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 
 interface Group {
   key: string
@@ -84,7 +84,7 @@ export default function PaySummary({ rows, loading }: { rows: PayRow[]; loading:
       </div>
 
       <div className="grid grid-cols-3 gap-2 p-4">
-        <Tile label="Total pay" value={inr.format(totals.amount)} />
+        <Tile label="Total pay" value={usd.format(totals.amount)} />
         <Tile label="Paid hours" value={(totals.hours - totals.unrated).toFixed(2)} />
         <Tile
           label="Hours with no rate"
@@ -114,7 +114,7 @@ export default function PaySummary({ rows, loading }: { rows: PayRow[]; loading:
                   <td className="px-3 py-2 font-medium text-slate-700">{g.name}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{g.hours.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right text-slate-700">
-                    {inr.format(g.amount)}
+                    {usd.format(g.amount)}
                     {g.unratedHours > 0 && (
                       <span className="ml-1 text-amber-700" title="Some hours have no rate set">
                         +{g.unratedHours.toFixed(2)}h unrated
@@ -128,7 +128,7 @@ export default function PaySummary({ rows, loading }: { rows: PayRow[]; loading:
               <tr>
                 <td className="px-3 py-2 text-slate-700">Total</td>
                 <td className="px-3 py-2 text-right text-slate-700">{totals.hours.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right text-slate-700">{inr.format(totals.amount)}</td>
+                <td className="px-3 py-2 text-right text-slate-700">{usd.format(totals.amount)}</td>
               </tr>
             </tfoot>
           </table>

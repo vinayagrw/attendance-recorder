@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useSupervisor } from '@/hooks/useSupervisor'
-import { inr } from './PaySummary'
+import { usd } from './PaySummary'
 
 interface Rate {
   id: string
@@ -89,7 +89,7 @@ export default function WorkerRates({ workerId }: { workerId: string }) {
           {rates.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-2">
               <span>
-                <span className="font-medium">{inr.format(Number(r.hourly_rate))}/hr</span>
+                <span className="font-medium">{usd.format(Number(r.hourly_rate))}/hr</span>
                 <span className="text-slate-500"> from {r.effective_from}</span>
                 {r.id === currentId && <span className="ml-1 rounded bg-green-100 px-1 text-xs text-green-800">current</span>}
                 {r.effective_from > today && <span className="ml-1 rounded bg-blue-100 px-1 text-xs text-blue-800">upcoming</span>}
@@ -97,7 +97,7 @@ export default function WorkerRates({ workerId }: { workerId: string }) {
               <button
                 className="text-xs text-red-700"
                 disabled={remove.isPending}
-                onClick={() => confirm(`Delete the ${inr.format(Number(r.hourly_rate))} rate from ${r.effective_from}?`) && remove.mutate(r.id)}
+                onClick={() => confirm(`Delete the ${usd.format(Number(r.hourly_rate))} rate from ${r.effective_from}?`) && remove.mutate(r.id)}
               >
                 Delete
               </button>
@@ -108,7 +108,7 @@ export default function WorkerRates({ workerId }: { workerId: string }) {
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col text-xs text-slate-600">
-          New rate (₹/hr)
+          New rate ($/hr)
           <input className="input-field w-28" inputMode="decimal" value={rate}
             onChange={(e) => setRate(e.target.value)} placeholder="e.g. 120" />
         </label>
